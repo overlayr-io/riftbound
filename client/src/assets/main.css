@@ -1,1 +1,15 @@
 @import "tailwindcss";
+
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #060d09;
+    color: #fff;
+}
+
+#app {
+    height: 100vh;
+    width: 100vw;
+}
