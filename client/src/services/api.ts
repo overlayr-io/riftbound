@@ -74,12 +74,24 @@ export const lobbyApi = {
     return request('DELETE', `/${lobbyId}`)
   },
 
+  evictPlayer(lobbyId: string, playerId: string): Promise<void> {
+    return request('DELETE', `/${lobbyId}/players/${playerId}`)
+  },
+
   cancelMatchmaking(lobbyId: string): Promise<void> {
     return request('DELETE', `/${lobbyId}/matchmaking`)
   },
 
   toggleReady(lobbyId: string): Promise<void> {
     return request('PATCH', `/${lobbyId}/ready`)
+  },
+
+  setTeam(lobbyId: string, playerId: string, teamId: '1' | '2' | null): Promise<void> {
+    return request('PATCH', `/${lobbyId}/players/${playerId}/team`, { teamId })
+  },
+
+  randomizeTeams(lobbyId: string): Promise<void> {
+    return request('POST', `/${lobbyId}/teams/randomize`)
   },
 
   sendMessage(lobbyId: string, text: string): Promise<void> {

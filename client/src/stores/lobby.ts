@@ -8,10 +8,18 @@ import {
   onSnapshot,
   type Unsubscribe,
 } from 'firebase/firestore'
+import {
+  ref as rtdbRef,
+  set as rtdbSet,
+  remove as rtdbRemove,
+  onValue,
+  onDisconnect,
+  type Unsubscribe as RtdbUnsubscribe,
+} from 'firebase/database'
 import type { Lobby, LobbyMessage, LobbyPlayerState } from '@riftbound/shared'
 import type { GameMode, GameDeckFormat, GameMatchFormat } from '@riftbound/shared'
 import { MAX_PLAYERS_BY_MODE } from '@riftbound/shared'
-import { firestore } from '@/firebase'
+import { firestore, rtdb } from '@/firebase'
 import { useAuthStore } from './auth'
 import { lobbyApi, ApiError } from '@/services/api'
 
@@ -24,6 +32,8 @@ export const useLobbyStore = defineStore('lobby', () => {
 
   let unsubLobby: Unsubscribe | null = null
   let unsubMessages: Unsubscribe | null = null
+  let unsubPresence: RtdbUnsubscribe | null = null
+  let presencePath: string | null = null
 
   // ── Computed ────────────────────────────────────────────────────────────────
 
@@ -40,7 +50,8 @@ export const useLobbyStore = defineStore('lobby', () => {
   const canStart = computed(() => {
     if (!lobby.value || !isHost.value) return false
     const players = Array.from(lobby.value.players.values())
-    return players.length >= 2 && players.every(p => p.isReady)
+    const required = MAX_PLAYERS_BY_MODE[lobby.value.mode]
+    return players.length === required && players.every(p => p.isReady)
   })
 
   const isReady = computed(() => {
@@ -104,6 +115,41 @@ export const useLobbyStore = defineStore('lobby', () => {
     )
   }
 
+  async function attachPresence(lobbyId: string, uid: string) {
+    const path = `presence/${lobbyId}/${uid}`
+    presencePath = path
+    const myRef = rtdbRef(rtdb, path)
+
+    // Côté Firebase : supprime automatiquement ce nœud si la connexion WebSocket coupe
+    await onDisconnect(myRef).remove()
+    await rtdbSet(myRef, true)
+
+    // Écoute la présence du lobby — quand un uid disparaît → le serveur est notifié
+    const lobbyPresenceRef = rtdbRef(rtdb, `presence/${lobbyId}`)
+    let knownUids = new Set<string>()
+
+    unsubPresence = onValue(lobbyPresenceRef, (snap) => {
+      const current = new Set<string>(snap.val() ? Object.keys(snap.val()) : [])
+
+      for (const gone of knownUids) {
+        if (!current.has(gone) && gone !== uid) {
+          // Un autre joueur a disparu → n'importe quel membre authentifié peut signaler son départ
+          lobbyApi.evictPlayer(lobbyId, gone).catch(() => {})
+        }
+      }
+      knownUids = current
+    })
+  }
+
+  async function detachPresence() {
+    unsubPresence?.()
+    unsubPresence = null
+    if (presencePath) {
+      await rtdbRemove(rtdbRef(rtdb, presencePath)).catch(() => {})
+      presencePath = null
+    }
+  }
+
   function detachListeners() {
     unsubLobby?.()
     unsubMessages?.()
@@ -123,6 +169,7 @@ export const useLobbyStore = defineStore('lobby', () => {
     const result = await lobbyApi.matchmaking(uid, mode, deckFormat)
     const lobbyId = result.lobby.lobbyId
     attachListeners(lobbyId)
+    await attachPresence(lobbyId, uid)
     return { joined: result.joined }
   }
 
@@ -136,6 +183,7 @@ export const useLobbyStore = defineStore('lobby', () => {
     error.value = null
     const dto = await lobbyApi.create(uid, mode, matchFormat, deckFormat)
     attachListeners(dto.lobbyId)
+    await attachPresence(dto.lobbyId, uid)
   }
 
   async function joinLobby(code: string): Promise<void> {
@@ -145,6 +193,7 @@ export const useLobbyStore = defineStore('lobby', () => {
     try {
       const dto = await lobbyApi.joinByCode(uid, code)
       attachListeners(dto.lobbyId)
+      await attachPresence(dto.lobbyId, uid)
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 404) throw new Error('CODE_NOT_FOUND')
@@ -156,6 +205,7 @@ export const useLobbyStore = defineStore('lobby', () => {
 
   async function leaveLobby(): Promise<void> {
     const id = lobby.value?.lobbyId
+    await detachPresence()
     detachListeners()
     lobby.value = null
     messages.value = []
@@ -164,6 +214,7 @@ export const useLobbyStore = defineStore('lobby', () => {
 
   async function cancelMatchmaking(): Promise<void> {
     const id = lobby.value?.lobbyId
+    await detachPresence()
     detachListeners()
     lobby.value = null
     messages.value = []
@@ -173,6 +224,16 @@ export const useLobbyStore = defineStore('lobby', () => {
   async function toggleReady(): Promise<void> {
     if (!lobby.value) return
     await lobbyApi.toggleReady(lobby.value.lobbyId)
+  }
+
+  async function setTeam(targetUid: string, teamId: '1' | '2' | null): Promise<void> {
+    if (!lobby.value) return
+    await lobbyApi.setTeam(lobby.value.lobbyId, targetUid, teamId)
+  }
+
+  async function randomizeTeams(): Promise<void> {
+    if (!lobby.value) return
+    await lobbyApi.randomizeTeams(lobby.value.lobbyId)
   }
 
   async function startGame(): Promise<void> {
@@ -200,7 +261,10 @@ export const useLobbyStore = defineStore('lobby', () => {
     startGame,
     startMatchmaking,
     cancelMatchmaking,
+    setTeam,
+    randomizeTeams,
     sendMessage,
     detachListeners,
+    detachPresence,
   }
 })

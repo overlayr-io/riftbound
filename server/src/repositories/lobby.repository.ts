@@ -1,4 +1,4 @@
-import type { Lobby, LobbyPlayerState, LobbyType } from '@riftbound/shared'
+import type {GameMatchFormat, Lobby, LobbyPlayerState, LobbyType} from '@riftbound/shared'
 import type { GameMode, GameDeckFormat } from '@riftbound/shared'
 import { db } from '../config/firebase'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -90,8 +90,8 @@ export class LobbyRepository {
     host: string,
     lobbyCode: string,
     mode: GameMode,
-    matchFormat: string,
-    deckFormat: string,
+    matchFormat: GameMatchFormat,
+    deckFormat: GameDeckFormat,
     initialPlayer: { uid: string; state: LobbyPlayerState },
   ): Promise<Lobby> {
     const now = FieldValue.serverTimestamp()

@@ -25,7 +25,7 @@ export async function getLobby(req: Request, res: Response, next: NextFunction) 
 export async function startMatchmaking(req: Request, res: Response, next: NextFunction) {
   try {
     const uid = req.user!.uid
-    const { playerName, mode, deckFormat } = req.body
+    const { playerName, mode, matchFormat, deckFormat } = req.body
     if (!playerName || !mode) { res.status(400).json({ error: 'Missing fields' }); return }
     const result = await lobbyService.matchmaking(uid, playerName, mode, deckFormat ?? 'ANY')
     res.status(200).json({ joined: result.joined, lobby: serializeLobby(result.lobby) })
@@ -68,6 +68,22 @@ export async function leaveLobby(req: Request, res: Response, next: NextFunction
   } catch (err) { next(err) }
 }
 
+export async function evictPlayer(req: Request, res: Response, next: NextFunction) {
+  try {
+    const requesterUid = req.user!.uid
+    const targetUid = param(req.params.playerId)
+    const lobbyId = param(req.params.id)
+
+    const lobby = await lobbyService.getLobbyById(lobbyId)
+    // Seuls les membres du lobby peuvent signaler un déconnecté
+    if (!lobby || !lobby.players.has(requesterUid)) {
+      res.status(403).json({ error: 'Not in lobby' }); return
+    }
+    await lobbyService.leave(targetUid, lobbyId)
+    res.status(204).send()
+  } catch (err) { next(err) }
+}
+
 export async function cancelMatchmaking(req: Request, res: Response, next: NextFunction) {
   try {
     await lobbyService.cancelMatchmaking(req.user!.uid, param(req.params.id))
@@ -80,6 +96,35 @@ export async function toggleReady(req: Request, res: Response, next: NextFunctio
     await lobbyService.toggleReady(req.user!.uid, param(req.params.id))
     res.status(204).send()
   } catch (err) { next(err) }
+}
+
+export async function setTeam(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { teamId } = req.body
+    if (!['1', '2', null].includes(teamId)) { res.status(400).json({ error: 'Invalid teamId' }); return }
+    await lobbyService.setTeam(req.user!.uid, param(req.params.id), param(req.params.playerId), teamId)
+    res.status(204).send()
+  } catch (err: unknown) {
+    if (err instanceof Error) {
+      if (err.message === 'FORBIDDEN') { res.status(403).json({ error: 'Forbidden' }); return }
+      if (err.message === 'NOT_2V2') { res.status(400).json({ error: 'Not a 2v2 lobby' }); return }
+      if (err.message === 'LOBBY_NOT_FOUND') { res.status(404).json({ error: 'Lobby not found' }); return }
+    }
+    next(err)
+  }
+}
+
+export async function randomizeTeams(req: Request, res: Response, next: NextFunction) {
+  try {
+    await lobbyService.randomizeTeams(req.user!.uid, param(req.params.id))
+    res.status(204).send()
+  } catch (err: unknown) {
+    if (err instanceof Error) {
+      if (err.message === 'FORBIDDEN') { res.status(403).json({ error: 'Host only' }); return }
+      if (err.message === 'NOT_2V2') { res.status(400).json({ error: 'Not a 2v2 lobby' }); return }
+    }
+    next(err)
+  }
 }
 
 export async function sendMessage(req: Request, res: Response, next: NextFunction) {

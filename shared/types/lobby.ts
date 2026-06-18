@@ -20,7 +20,7 @@ export interface Lobby {
   matchFormat: GameMatchFormat | 'ANY'
   deckFormat: GameDeckFormat | 'ANY'
   players: Map<PlayerId, LobbyPlayerState>
-  gameId: string | null
+gameId: string | null
   createdAt: Date
   updatedAt: Date
   deletedAt: Date | null

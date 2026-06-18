@@ -38,8 +38,8 @@ export class LobbyService {
       uid,
       lobbyCode,
       mode,
-      'ANY',
-      deckFormat,
+      'BO1',
+      deckFormat === 'ANY' ? 'constructed' : deckFormat,
       { uid, state },
     )
     return { lobby, joined: false }
@@ -115,6 +115,36 @@ export class LobbyService {
     if (!lobby.players.has(uid)) throw new Error('PLAYER_NOT_IN_LOBBY')
     if (!text.trim()) throw new Error('EMPTY_MESSAGE')
     await this.msgRepo.add(lobbyId, uid, text.trim(), 'chat')
+  }
+
+  async setTeam(
+    requesterUid: string,
+    lobbyId: string,
+    targetUid: string,
+    teamId: '1' | '2' | null,
+  ): Promise<void> {
+    const lobby = await this.lobbyRepo.findById(lobbyId)
+    if (!lobby) throw new Error('LOBBY_NOT_FOUND')
+    if (lobby.mode !== '2v2') throw new Error('NOT_2V2')
+    if (requesterUid !== lobby.host && requesterUid !== targetUid) throw new Error('FORBIDDEN')
+    if (!lobby.players.has(targetUid)) throw new Error('PLAYER_NOT_IN_LOBBY')
+    await this.lobbyRepo.updatePlayerState(lobbyId, targetUid, { teamId })
+  }
+
+  async randomizeTeams(requesterUid: string, lobbyId: string): Promise<void> {
+    const lobby = await this.lobbyRepo.findById(lobbyId)
+    if (!lobby) throw new Error('LOBBY_NOT_FOUND')
+    if (lobby.mode !== '2v2') throw new Error('NOT_2V2')
+    if (requesterUid !== lobby.host) throw new Error('FORBIDDEN')
+
+    const playerIds = Array.from(lobby.players.keys())
+      .sort(() => Math.random() - 0.5)
+
+    const half = Math.ceil(playerIds.length / 2)
+    for (let i = 0; i < playerIds.length; i++) {
+      const teamId: '1' | '2' = i < half ? '1' : '2'
+      await this.lobbyRepo.updatePlayerState(lobbyId, playerIds[i], { teamId })
+    }
   }
 
   async cancelMatchmaking(uid: string, lobbyId: string): Promise<void> {

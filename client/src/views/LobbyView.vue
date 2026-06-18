@@ -26,7 +26,7 @@ const activeTab = ref<TabId>('matchmaking')
 // ── Game mode options ──────────────────────────────────────────────────────
 const MODES: { value: GameMode; label: string; desc: string; soon: boolean }[] = [
   { value: 'dual', label: 'Duel', desc: '1 contre 1', soon: false },
-  { value: '2v2', label: '2V2', desc: 'Équipes de 2', soon: true },
+  { value: '2v2', label: '2V2', desc: 'Équipes de 2', soon: false },
   { value: 'FFA', label: 'FFA', desc: 'Chacun pour soi', soon: true },
 ]
 
@@ -191,6 +191,43 @@ async function handleStart() {
   await lobbyStore.startGame()
 }
 
+function canChangeTeam(playerId: string): boolean {
+  return isHost.value || authStore.user?.uid === playerId
+}
+
+const teamDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+function handleSetTeam(playerId: string, teamId: '1' | '2') {
+  if (!canChangeTeam(playerId)) return
+  const current = lobbyStore.lobby?.players.get(playerId)?.teamId
+  const next: '1' | '2' | null = current === teamId ? null : teamId
+
+  // Optimistic local update so the UI réagit immédiatement
+  const player = lobbyStore.lobby?.players.get(playerId)
+  if (player) player.teamId = next
+
+  // Annule le timer précédent et repart à 1.5s
+  const existing = teamDebounceTimers.get(playerId)
+  if (existing) clearTimeout(existing)
+  teamDebounceTimers.set(
+    playerId,
+    setTimeout(async () => {
+      teamDebounceTimers.delete(playerId)
+      await lobbyStore.setTeam(playerId, next)
+    }, 1500),
+  )
+}
+
+async function handleRandomizeTeams() {
+  if (isHost.value) {
+    await lobbyStore.randomizeTeams()
+  } else {
+    const uid = authStore.user?.uid
+    if (!uid) return
+    await lobbyStore.setTeam(uid, Math.random() < 0.5 ? '1' : '2')
+  }
+}
+
 async function handleSend() {
   const text = chatDraft.value.trim()
   if (!text) return
@@ -200,7 +237,10 @@ async function handleSend() {
 
 onUnmounted(() => {
   if (searchTimer) clearInterval(searchTimer)
+  teamDebounceTimers.forEach(clearTimeout)
+  teamDebounceTimers.clear()
   lobbyStore.detachListeners()
+  lobbyStore.detachPresence()
 })
 
 // ── Navigation guard ───────────────────────────────────────────────────────
@@ -532,6 +572,18 @@ async function confirmLeave() {
               <div class="players-count">
                 JOUEURS
                 <span class="players-fraction">{{ totalPlayers }} / {{ slotMax }}</span>
+                <button
+                  v-if="lobbyStore.lobby?.mode === '2v2'"
+                  class="random-teams-btn"
+                  :title="isHost ? 'Équipes aléatoires' : 'Équipe aléatoire'"
+                  @click="handleRandomizeTeams"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/>
+                    <polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/>
+                  </svg>
+                  {{ isHost ? 'ALÉATOIRE' : 'MON ÉQUIPE' }}
+                </button>
               </div>
 
               <!-- Host row -->
@@ -542,6 +594,20 @@ async function confirmLeave() {
                   <span v-if="isHost" class="player-you">(vous)</span>
                 </div>
                 <div class="player-row__badges">
+                  <div v-if="lobbyStore.lobby?.mode === '2v2'" class="team-selector">
+                    <button
+                      class="team-btn team-btn--1"
+                      :class="{ 'team-btn--active': hostPlayerState.teamId === '1' }"
+                      :disabled="!canChangeTeam(hostPlayerId!)"
+                      @click="handleSetTeam(hostPlayerId!, '1')"
+                    >1</button>
+                    <button
+                      class="team-btn team-btn--2"
+                      :class="{ 'team-btn--active': hostPlayerState.teamId === '2' }"
+                      :disabled="!canChangeTeam(hostPlayerId!)"
+                      @click="handleSetTeam(hostPlayerId!, '2')"
+                    >2</button>
+                  </div>
                   <span v-if="hostPlayerState.isReady" class="player-badge player-badge--ready">PRÊT</span>
                   <span class="player-badge player-badge--host">HÔTE</span>
                 </div>
@@ -558,12 +624,28 @@ async function confirmLeave() {
                   <span class="player-name">{{ player.playerName }}</span>
                   <span v-if="authStore.user?.uid === player.playerId" class="player-you">(vous)</span>
                 </div>
-                <span
-                  class="player-badge"
-                  :class="player.isReady ? 'player-badge--ready' : 'player-badge--waiting'"
-                >
-                  {{ player.isReady ? 'PRÊT' : '...' }}
-                </span>
+                <div class="player-row__badges">
+                  <div v-if="lobbyStore.lobby?.mode === '2v2'" class="team-selector">
+                    <button
+                      class="team-btn team-btn--1"
+                      :class="{ 'team-btn--active': player.teamId === '1' }"
+                      :disabled="!canChangeTeam(player.playerId)"
+                      @click="handleSetTeam(player.playerId, '1')"
+                    >1</button>
+                    <button
+                      class="team-btn team-btn--2"
+                      :class="{ 'team-btn--active': player.teamId === '2' }"
+                      :disabled="!canChangeTeam(player.playerId)"
+                      @click="handleSetTeam(player.playerId, '2')"
+                    >2</button>
+                  </div>
+                  <span
+                    class="player-badge"
+                    :class="player.isReady ? 'player-badge--ready' : 'player-badge--waiting'"
+                  >
+                    {{ player.isReady ? 'PRÊT' : '...' }}
+                  </span>
+                </div>
               </div>
 
               <!-- Empty slots -->
@@ -1066,7 +1148,8 @@ async function confirmLeave() {
 
 .players-count {
   display: flex;
-  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
   font-size: 0.6rem;
   letter-spacing: 0.25em;
   color: #4a6a70;
@@ -1077,6 +1160,85 @@ async function confirmLeave() {
 
 .players-fraction {
   color: #C8AA6E;
+  flex: 1;
+}
+
+.random-teams-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  font: inherit;
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: #4a6a70;
+  background: transparent;
+  border: 1px solid rgba(90, 110, 130, 0.3);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.random-teams-btn svg {
+  width: 0.65rem;
+  height: 0.65rem;
+  flex-shrink: 0;
+}
+
+.random-teams-btn:hover {
+  color: #C8AA6E;
+  border-color: rgba(200, 170, 110, 0.4);
+}
+
+/* ── Team selector ── */
+.team-selector {
+  display: flex;
+  gap: 0.2rem;
+}
+
+.team-btn {
+  width: 1.3rem;
+  height: 1.3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: inherit;
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  background: rgba(6, 15, 27, 0.8);
+  border: 1px solid rgba(90, 110, 130, 0.3);
+  color: #4a6a70;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  flex-shrink: 0;
+}
+
+.team-btn:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.team-btn--1.team-btn--active {
+  background: rgba(0, 204, 185, 0.15);
+  border-color: #00CCB9;
+  color: #00CCB9;
+}
+
+.team-btn--2.team-btn--active {
+  background: rgba(200, 170, 110, 0.15);
+  border-color: #C8AA6E;
+  color: #C8AA6E;
+}
+
+.team-btn--1:not(:disabled):not(.team-btn--active):hover {
+  border-color: rgba(0, 204, 185, 0.4);
+  color: rgba(0, 204, 185, 0.7);
+}
+
+.team-btn--2:not(:disabled):not(.team-btn--active):hover {
+  border-color: rgba(200, 170, 110, 0.4);
+  color: rgba(200, 170, 110, 0.7);
 }
 
 .player-row {
