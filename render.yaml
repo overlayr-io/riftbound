@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: riftbound-api
+    env: node
+    rootDir: server
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT_BASE64
+        sync: false
+      - key: CLIENT_URL
+        sync: false

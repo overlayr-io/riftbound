@@ -1,0 +1,22 @@
+{
+  "name": "riftbound-tcg",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "concurrently -n emulators,client,server -c cyan,green,yellow \"npm run emulators\" \"npm run dev --workspace=client\" \"npm run dev --workspace=server\"",
+    "emulators": "firebase emulators:start",
+    "build": "npm run build --workspace=shared && npm run build --workspace=client && npm run build --workspace=server",
+    "deploy:client": "npm run build --workspace=client && firebase deploy --only hosting",
+    "deploy:server": "npm run build --workspace=server",
+    "kill-ports": "lsof -ti:3000,4000,5000,5001,5173,8080,9000,9099 | xargs kill -9 2>/dev/null; echo 'Ports freed'",
+    "dev:clean": "npm run kill-ports && npm run dev"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0",
+    "firebase-tools": "^13.0.0"
+  }
+}
