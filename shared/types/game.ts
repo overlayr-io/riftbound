@@ -1,4 +1,5 @@
 import {PlayerId} from "./player";
+import {LobbyType} from "./lobby";
 
 export type GameMode = 'dual' | '2v2' | 'FFA'
 export type GameMatchFormat = 'BO1' | 'BO3' | 'BO5'
@@ -18,10 +19,14 @@ export interface GamePlayerState {
 
 export interface Game {
   gameId: string
+  type: LobbyType
   host: PlayerId
   lobbyCode: string
   mode: GameMode
   matchFormat: GameMatchFormat
   deckFormat: GameDeckFormat
   players: Map<PlayerId, GamePlayerState>
+  createdAt: Date
+  updatedAt: Date
+  deletedAt: Date | null
 }
