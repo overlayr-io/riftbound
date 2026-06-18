@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import type { GameMode, GameDeckFormat, GameMatchFormat } from '@riftbound/shared'
+import { MAX_PLAYERS_BY_MODE } from '@riftbound/shared'
 import { useAuthStore } from '@/stores/auth'
 import { useLobbyStore } from '@/stores/lobby'
 import GameCard from '@/components/GameCard.vue'
@@ -29,7 +30,7 @@ const MODES: { value: GameMode; label: string; desc: string; soon: boolean }[] =
   { value: 'FFA', label: 'FFA', desc: 'Chacun pour soi', soon: true },
 ]
 
-// ── Match format options (BO1 only available, BO3 soon, no BO5) ──────────
+// ── Match format options ───────────────────────────────────────────────────
 const MATCH_FORMATS: { value: GameMatchFormat; label: string; desc: string; soon: boolean }[] = [
   { value: 'BO1', label: 'BO1', desc: 'Manche unique', soon: false },
   { value: 'BO3', label: 'BO3', desc: 'Meilleur des 3', soon: true },
@@ -37,13 +38,11 @@ const MATCH_FORMATS: { value: GameMatchFormat; label: string; desc: string; soon
 const matchFormat = 'BO1' as GameMatchFormat
 
 // ── Deck format options ────────────────────────────────────────────────────
-// Matchmaking: constructed (available), sealed + learn_to_play (soon), + ANY
 const DECK_FORMATS_MM: { value: GameDeckFormat | 'ANY'; label: string; desc: string; soon?: boolean }[] = [
   { value: 'constructed', label: 'Construit', desc: 'Deck personnel' },
   { value: 'sealed', label: 'Scellé', desc: 'Boosters', soon: true },
   { value: 'learn_to_play', label: 'Apprendre', desc: 'Deck de démarrage', soon: true },
 ]
-// Create: constructed (available), sealed + learn_to_play (soon), no ANY
 const DECK_FORMATS_CREATE: { value: GameDeckFormat; label: string; desc: string; soon?: boolean }[] = [
   { value: 'constructed', label: 'Construit', desc: 'Deck personnel' },
   { value: 'sealed', label: 'Scellé', desc: 'Boosters', soon: true },
@@ -55,12 +54,41 @@ const gameMode = ref<GameMode>('dual')
 const deckFormatMM = ref<GameDeckFormat | 'ANY'>('constructed')
 const deckFormatCreate = ref<GameDeckFormat>('constructed')
 const roomCodeInput = ref('')
+const joinError = ref<string | null>(null)
+const codeCopied = ref(false)
 
-// ── Matchmaking state ──────────────────────────────────────────────────────
-const isSearching = ref(false)
+function copyCode() {
+  const code = lobbyStore.lobby?.lobbyCode
+  if (!code) return
+  navigator.clipboard.writeText(code)
+  codeCopied.value = true
+  setTimeout(() => { codeCopied.value = false }, 1800)
+}
+
+// ── Matchmaking / lobby state ──────────────────────────────────────────────
+// isSearching: true while in a matchmaking lobby waiting for an opponent
+const isSearching = computed(() => {
+  const l = lobbyStore.lobby
+  if (!l || l.type !== 'matchmaking') return false
+  return l.players.size < MAX_PLAYERS_BY_MODE[l.mode]
+})
+
 const gameFound = ref(false)
 const elapsedSeconds = ref(0)
 let searchTimer: ReturnType<typeof setInterval> | null = null
+
+// Start/stop elapsed timer based on isSearching
+watch(isSearching, (searching, wasSearching) => {
+  if (searching && !wasSearching) {
+    elapsedSeconds.value = 0
+    searchTimer = setInterval(() => { elapsedSeconds.value++ }, 1000)
+  } else if (!searching && wasSearching && lobbyStore.lobby?.type === 'matchmaking') {
+    // Opponent just joined — flash "game found" briefly
+    if (searchTimer) { clearInterval(searchTimer); searchTimer = null }
+    gameFound.value = true
+    setTimeout(() => { gameFound.value = false }, 2000)
+  }
+})
 
 const fakeEta = computed(() => {
   if (elapsedSeconds.value < 30) return '< 1 MIN'
@@ -102,6 +130,7 @@ interface DisplayMessage {
   text: string
   timestamp: Date
   isOwn: boolean
+  isSystem: boolean
 }
 
 const chatDraft = ref('')
@@ -109,10 +138,11 @@ const chatDraft = ref('')
 const displayMessages = computed((): DisplayMessage[] =>
   lobbyStore.messages.map(msg => ({
     id: msg.messageId,
-    from: lobbyStore.lobby?.players.get(msg.senderId)?.playerName ?? 'Inconnu',
+    from: msg.type === 'system' ? '' : (lobbyStore.lobby?.players.get(msg.senderId)?.playerName ?? 'Inconnu'),
     text: msg.message,
     timestamp: msg.sendAt,
     isOwn: msg.senderId === authStore.user?.uid,
+    isSystem: msg.type === 'system',
   }))
 )
 
@@ -122,27 +152,30 @@ function formatTime(date: Date): string {
 
 // ── Actions ────────────────────────────────────────────────────────────────
 async function handleMatchmaking() {
-  isSearching.value = true
-  gameFound.value = false
-  elapsedSeconds.value = 0
-  searchTimer = setInterval(() => { elapsedSeconds.value++ }, 1000)
   await lobbyStore.startMatchmaking(gameMode.value, deckFormatMM.value)
 }
 
 async function handleCreate() {
-  await lobbyStore.createLobby(gameMode.value, deckFormatCreate.value)
+  await lobbyStore.createLobby(gameMode.value, matchFormat, deckFormatCreate.value)
 }
 
 async function handleJoin() {
   if (roomCodeInput.value.length !== 5) return
-  await lobbyStore.joinLobby(roomCodeInput.value)
+  joinError.value = null
+  try {
+    await lobbyStore.joinLobby(roomCodeInput.value)
+  } catch (err) {
+    if (err instanceof Error) {
+      if (err.message === 'CODE_NOT_FOUND') joinError.value = 'Code introuvable.'
+      else if (err.message === 'LOBBY_FULL') joinError.value = 'Partie complète.'
+      else joinError.value = 'Erreur de connexion.'
+    }
+  }
 }
 
 async function handleLeave() {
-  if (isSearching.value) {
+  if (isSearching.value || lobbyStore.lobby?.type === 'matchmaking') {
     if (searchTimer) { clearInterval(searchTimer); searchTimer = null }
-    isSearching.value = false
-    gameFound.value = false
     await lobbyStore.cancelMatchmaking()
   } else {
     await lobbyStore.leaveLobby()
@@ -167,6 +200,7 @@ async function handleSend() {
 
 onUnmounted(() => {
   if (searchTimer) clearInterval(searchTimer)
+  lobbyStore.detachListeners()
 })
 
 // ── Navigation guard ───────────────────────────────────────────────────────
@@ -182,10 +216,8 @@ function handleBackClick() {
 
 async function confirmLeave() {
   showLeaveConfirm.value = false
-  if (isSearching.value) {
-    if (searchTimer) { clearInterval(searchTimer); searchTimer = null }
-    isSearching.value = false
-    gameFound.value = false
+  if (searchTimer) { clearInterval(searchTimer); searchTimer = null }
+  if (isSearching.value || lobbyStore.lobby?.type === 'matchmaking') {
     await lobbyStore.cancelMatchmaking()
   } else if (inLobby.value) {
     await lobbyStore.leaveLobby()
@@ -216,17 +248,36 @@ async function confirmLeave() {
 
         <!-- ── Left panel ── -->
         <GameCard>
-          <template v-if="!inLobby" #header>
+          <template v-if="!inLobby || isSearching" #header>
             <TabBar v-model="activeTab" :tabs="TABS" :disabled="isSearching" />
           </template>
           <template v-else #header>
-            <div class="chat-header">
+            <div class="lobby-info-header">
+              <span class="chat-eyebrow">PARAMÈTRES</span>
+              <div class="lobby-info-grid">
+                <div class="lobby-info-cell">
+                  <span class="lobby-info-key">TYPE</span>
+                  <span class="lobby-info-val">{{ lobbyStore.lobby?.type === 'matchmaking' ? 'Matchmaking' : 'Privé' }}</span>
+                </div>
+                <div class="lobby-info-cell">
+                  <span class="lobby-info-key">MODE</span>
+                  <span class="lobby-info-val">{{ MODES.find(m => m.value === lobbyStore.lobby?.mode)?.label ?? '—' }}</span>
+                </div>
+                <div class="lobby-info-cell">
+                  <span class="lobby-info-key">MATCH</span>
+                  <span class="lobby-info-val capitalize">{{ lobbyStore.lobby?.matchFormat.toString().toLowerCase() }}</span>
+                </div>
+                <div class="lobby-info-cell">
+                  <span class="lobby-info-key">DECK</span>
+                  <span class="lobby-info-val">{{ DECK_FORMATS_CREATE.find(f => f.value === lobbyStore.lobby?.deckFormat)?.label ?? lobbyStore.lobby?.deckFormat }}</span>
+                </div>
+              </div>
               <span class="chat-eyebrow">CHAT</span>
             </div>
           </template>
 
           <!-- Tab: matchmaking -->
-          <div v-if="!inLobby && activeTab === 'matchmaking'" class="panel-content">
+          <div v-if="(!inLobby || isSearching) && activeTab === 'matchmaking'" class="panel-content">
             <div class="panel-fields">
               <div class="field-group">
                 <label class="field-label">MODE DE JEU</label>
@@ -272,7 +323,7 @@ async function confirmLeave() {
           </div>
 
           <!-- Tab: create -->
-          <div v-else-if="!inLobby && activeTab === 'create'" class="panel-content">
+          <div v-else-if="(!inLobby || isSearching) && activeTab === 'create'" class="panel-content">
             <div class="panel-fields">
               <div class="field-group">
                 <label class="field-label">MODE DE JEU</label>
@@ -317,7 +368,7 @@ async function confirmLeave() {
           </div>
 
           <!-- Tab: join -->
-          <div v-else-if="!inLobby && activeTab === 'join'" class="panel-content">
+          <div v-else-if="(!inLobby || isSearching) && activeTab === 'join'" class="panel-content">
             <div class="panel-fields">
               <div class="field-group">
                 <label class="field-label">CODE DE SALON</label>
@@ -329,6 +380,7 @@ async function confirmLeave() {
                 />
               </div>
             </div>
+            <p v-if="joinError" class="join-error">{{ joinError }}</p>
             <ActionButton :disabled="roomCodeInput.length !== 5" @click="handleJoin">REJOINDRE</ActionButton>
           </div>
 
@@ -346,12 +398,17 @@ async function confirmLeave() {
                   v-for="msg in [...displayMessages].reverse()"
                   :key="msg.id"
                   class="chat-msg"
-                  :class="{ 'chat-msg--own': msg.isOwn }"
+                  :class="{ 'chat-msg--own': msg.isOwn, 'chat-msg--system': msg.isSystem }"
                 >
-                  <span class="chat-msg__meta">{{ msg.from }} · {{ formatTime(msg.timestamp) }}</span>
-                  <div class="chat-msg__bubble" :class="{ 'chat-msg__bubble--own': msg.isOwn }">
-                    {{ msg.text }}
-                  </div>
+                  <template v-if="msg.isSystem">
+                    <span class="chat-msg__system">{{ msg.text }}</span>
+                  </template>
+                  <template v-else>
+                    <span class="chat-msg__meta">{{ msg.from }} · {{ formatTime(msg.timestamp) }}</span>
+                    <div class="chat-msg__bubble" :class="{ 'chat-msg__bubble--own': msg.isOwn }">
+                      {{ msg.text }}
+                    </div>
+                  </template>
                 </div>
               </template>
             </div>
@@ -442,8 +499,25 @@ async function confirmLeave() {
           <div v-else class="panel-content">
 
             <div class="room-code-row">
-              <span class="room-code-label">CODE</span>
-              <span class="room-code">{{ lobbyStore.lobby?.lobbyCode }}</span>
+              <div class="room-code-block">
+                <span class="room-code-label">CODE</span>
+                <div class="room-code-value-row">
+                  <span class="room-code">{{ lobbyStore.lobby?.lobbyCode || '—' }}</span>
+                  <button
+                    class="copy-btn"
+                    :class="{ 'copy-btn--copied': codeCopied }"
+                    :title="codeCopied ? 'Copié !' : 'Copier le code'"
+                    @click="copyCode"
+                  >
+                    <svg v-if="!codeCopied" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                    </svg>
+                    <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
               <button class="leave-btn" @click="handleLeave">
                 <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9"/>
@@ -700,16 +774,54 @@ async function confirmLeave() {
   gap: 0.5rem;
 }
 
-/* ── Chat panel (in lobby, left panel) ── */
-.chat-header {
-  padding: 0.6rem 1rem;
+/* ── Lobby info header (left panel, in lobby) ── */
+.lobby-info-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
+.lobby-info-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: rgba(200, 170, 110, 0.1);
+  border-bottom: 1px solid rgba(200, 170, 110, 0.12);
+  border-top: 1px solid rgba(200, 170, 110, 0.12);
+}
+
+.lobby-info-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.5rem 0.4rem;
+  background: rgba(6, 15, 27, 0.7);
+}
+
+.lobby-info-key {
+  font-size: 0.48rem;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  color: #4a6a70;
+}
+
+.lobby-info-val {
+  font-size: 0.60rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: #C8AA6E;
+  text-align: center;
+}
+
+/* ── Chat panel (in lobby, left panel) ── */
 .chat-eyebrow {
   font-size: 0.6rem;
   font-weight: 700;
   letter-spacing: 0.3em;
   color: #C8AA6E;
+  padding: 0.5rem 1rem 0.4rem;
+  display: block;
 }
 
 .chat-panel {
@@ -861,22 +973,65 @@ async function confirmLeave() {
 .room-code-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.75rem;
 }
 
+.room-code-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
 .room-code-label {
-  font-size: 0.6rem;
+  font-size: 0.5rem;
   letter-spacing: 0.3em;
   color: #4a6a70;
   font-weight: 700;
 }
 
+.room-code-value-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .room-code {
-  flex: 1;
-  font-size: 1.1rem;
+  font-size: 1.6rem;
   font-weight: 900;
-  letter-spacing: 0.35em;
+  letter-spacing: 0.4em;
   color: #C8AA6E;
+  line-height: 1;
+}
+
+.copy-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  background: rgba(200, 170, 110, 0.08);
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  color: #C8AA6E;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.copy-btn svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.copy-btn:hover {
+  background: rgba(200, 170, 110, 0.18);
+  border-color: #C8AA6E;
+}
+
+.copy-btn--copied {
+  border-color: #00CCB9;
+  color: #00CCB9;
+  background: rgba(0, 204, 185, 0.1);
 }
 
 .leave-btn {
@@ -1203,6 +1358,29 @@ async function confirmLeave() {
 .mm-cancel-btn:hover {
   color: #e06060;
   border-color: #e06060;
+}
+
+/* ── System messages ── */
+.chat-msg--system {
+  align-items: center;
+}
+
+.chat-msg__system {
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  color: #4a6a70;
+  padding: 0.1rem 0.5rem;
+  border-left: 2px solid rgba(0, 204, 185, 0.2);
+  font-style: italic;
+}
+
+/* ── Join error ── */
+.join-error {
+  font-size: 0.6rem;
+  color: #e06060;
+  letter-spacing: 0.05em;
+  text-align: center;
+  margin: 0;
 }
 
 /* ── Keyframes ── */

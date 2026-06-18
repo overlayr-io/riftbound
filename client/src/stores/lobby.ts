@@ -1,15 +1,31 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import {
+  doc,
+  collection,
+  query,
+  orderBy,
+  onSnapshot,
+  type Unsubscribe,
+} from 'firebase/firestore'
 import type { Lobby, LobbyMessage, LobbyPlayerState } from '@riftbound/shared'
-import type { GameMode, GameDeckFormat } from '@riftbound/shared'
+import type { GameMode, GameDeckFormat, GameMatchFormat } from '@riftbound/shared'
 import { MAX_PLAYERS_BY_MODE } from '@riftbound/shared'
+import { firestore } from '@/firebase'
 import { useAuthStore } from './auth'
+import { lobbyApi, ApiError } from '@/services/api'
 
 export const useLobbyStore = defineStore('lobby', () => {
   const authStore = useAuthStore()
 
   const lobby = ref<Lobby | null>(null)
   const messages = ref<LobbyMessage[]>([])
+  const error = ref<string | null>(null)
+
+  let unsubLobby: Unsubscribe | null = null
+  let unsubMessages: Unsubscribe | null = null
+
+  // ── Computed ────────────────────────────────────────────────────────────────
 
   const isHost = computed(() => {
     if (!lobby.value || !authStore.user) return false
@@ -32,115 +48,147 @@ export const useLobbyStore = defineStore('lobby', () => {
     return lobby.value.players.get(authStore.user.uid)?.isReady ?? false
   })
 
-  function getPlayerName(): string {
-    const uid = authStore.user?.uid ?? 'unknown'
-    return `Joueur-${uid.slice(0, 4).toUpperCase()}`
+  // ── Listeners ───────────────────────────────────────────────────────────────
+
+  function attachListeners(lobbyId: string) {
+    detachListeners()
+
+    // Listener 1 — lobby document (players)
+    unsubLobby = onSnapshot(
+      doc(firestore, 'lobbies', lobbyId),
+      (snap) => {
+        if (!snap.exists()) {
+          lobby.value = null
+          return
+        }
+        const d = snap.data()
+        const rawPlayers: Record<string, LobbyPlayerState> = d.players ?? {}
+        lobby.value = {
+          lobbyId: snap.id,
+          type: d.type,
+          host: d.host,
+          lobbyCode: d.lobbyCode,
+          mode: d.mode,
+          matchFormat: d.matchFormat,
+          deckFormat: d.deckFormat,
+          players: new Map(Object.entries(rawPlayers)),
+          gameId: d.gameId ?? null,
+          createdAt: d.createdAt?.toDate() ?? new Date(),
+          updatedAt: d.updatedAt?.toDate() ?? new Date(),
+          deletedAt: d.deletedAt?.toDate() ?? null,
+        }
+      },
+      (err) => { console.error('[lobby] listener error', err) },
+    )
+
+    // Listener 2 — messages subcollection
+    unsubMessages = onSnapshot(
+      query(
+        collection(firestore, 'lobbies', lobbyId, 'messages'),
+        orderBy('sendAt', 'asc'),
+      ),
+      (snap) => {
+        messages.value = snap.docs.map((d) => {
+          const data = d.data()
+          return {
+            messageId: d.id,
+            lobbyId,
+            senderId: data.senderId,
+            message: data.message,
+            type: data.type,
+            sendAt: data.sendAt?.toDate() ?? new Date(),
+          }
+        })
+      },
+      (err) => { console.error('[messages] listener error', err) },
+    )
   }
 
-  async function createLobby(mode: GameMode, deckFormat: GameDeckFormat): Promise<void> {
-    const user = authStore.user
-    if (!user) return
+  function detachListeners() {
+    unsubLobby?.()
+    unsubMessages?.()
+    unsubLobby = null
+    unsubMessages = null
+  }
 
-    const lobbyId = Math.random().toString(36).slice(2, 10).toUpperCase()
-    const lobbyCode = Math.random().toString(36).slice(2, 7).toUpperCase()
+  // ── Actions ─────────────────────────────────────────────────────────────────
 
-    const playerState: LobbyPlayerState = {
-      playerName: getPlayerName(),
-      isReady: false,
-      teamId: null,
-    }
+  async function startMatchmaking(
+    mode: GameMode,
+    deckFormat: GameDeckFormat | 'ANY',
+  ): Promise<{ joined: boolean }> {
+    const uid = authStore.user?.uid
+    if (!uid) throw new Error('Not authenticated')
+    error.value = null
+    const result = await lobbyApi.matchmaking(uid, mode, deckFormat)
+    const lobbyId = result.lobby.lobbyId
+    attachListeners(lobbyId)
+    return { joined: result.joined }
+  }
 
-    const players = new Map<string, LobbyPlayerState>()
-    players.set(user.uid, playerState)
-
-    lobby.value = {
-      lobbyId,
-      host: user.uid,
-      lobbyCode,
-      mode,
-      matchFormat: 'BO1',
-      deckFormat,
-      players,
-      gameId: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      deletedAt: null,
-    }
+  async function createLobby(
+    mode: GameMode,
+    matchFormat: GameMatchFormat,
+    deckFormat: GameDeckFormat,
+  ): Promise<void> {
+    const uid = authStore.user?.uid
+    if (!uid) throw new Error('Not authenticated')
+    error.value = null
+    const dto = await lobbyApi.create(uid, mode, matchFormat, deckFormat)
+    attachListeners(dto.lobbyId)
   }
 
   async function joinLobby(code: string): Promise<void> {
-    const user = authStore.user
-    if (!user) return
-
-    const lobbyId = Math.random().toString(36).slice(2, 10).toUpperCase()
-    const fakeHostId = `host-${Math.random().toString(36).slice(2, 6)}`
-
-    const players = new Map<string, LobbyPlayerState>()
-    players.set(fakeHostId, { playerName: 'Adversaire', isReady: false, teamId: null })
-    players.set(user.uid, { playerName: getPlayerName(), isReady: false, teamId: null })
-
-    lobby.value = {
-      lobbyId,
-      host: fakeHostId,
-      lobbyCode: code.toUpperCase(),
-      mode: 'dual',
-      matchFormat: 'BO1',
-      deckFormat: 'constructed',
-      players,
-      gameId: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      deletedAt: null,
+    const uid = authStore.user?.uid
+    if (!uid) throw new Error('Not authenticated')
+    error.value = null
+    try {
+      const dto = await lobbyApi.joinByCode(uid, code)
+      attachListeners(dto.lobbyId)
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.status === 404) throw new Error('CODE_NOT_FOUND')
+        if (err.status === 409) throw new Error('LOBBY_FULL')
+      }
+      throw err
     }
   }
 
   async function leaveLobby(): Promise<void> {
+    const id = lobby.value?.lobbyId
+    detachListeners()
     lobby.value = null
     messages.value = []
-  }
-
-  async function toggleReady(): Promise<void> {
-    const user = authStore.user
-    if (!lobby.value || !user) return
-    const state = lobby.value.players.get(user.uid)
-    if (!state) return
-    state.isReady = !state.isReady
-    lobby.value.updatedAt = new Date()
-  }
-
-  async function startGame(): Promise<void> {
-    // TODO: wire to Firebase
-    console.log('Starting game...')
-  }
-
-  async function startMatchmaking(_mode: GameMode, _deckFormat: GameDeckFormat | 'ANY'): Promise<void> {
-    // TODO: wire to Firebase matchmaking
-    console.log('Matchmaking...', _mode, _deckFormat)
+    if (id) await lobbyApi.leave(id).catch(() => {})
   }
 
   async function cancelMatchmaking(): Promise<void> {
-    // TODO: wire to Firebase
-    console.log('Matchmaking cancelled')
+    const id = lobby.value?.lobbyId
+    detachListeners()
+    lobby.value = null
+    messages.value = []
+    if (id) await lobbyApi.cancelMatchmaking(id).catch(() => {})
+  }
+
+  async function toggleReady(): Promise<void> {
+    if (!lobby.value) return
+    await lobbyApi.toggleReady(lobby.value.lobbyId)
+  }
+
+  async function startGame(): Promise<void> {
+    // TODO: wire to game start
+    console.log('Starting game...')
   }
 
   async function sendMessage(text: string): Promise<void> {
-    const user = authStore.user
-    if (!lobby.value || !user) return
-
-    const msg: LobbyMessage = {
-      messageId: Math.random().toString(36).slice(2),
-      lobbyId: lobby.value.lobbyId,
-      senderId: user.uid,
-      message: text,
-      type: 'chat',
-      sendAt: new Date(),
-    }
-    messages.value.push(msg)
+    if (!lobby.value) return
+    await lobbyApi.sendMessage(lobby.value.lobbyId, text)
   }
 
   return {
     lobby,
     messages,
+    error,
     isHost,
     isReady,
     canStart,
@@ -153,5 +201,6 @@ export const useLobbyStore = defineStore('lobby', () => {
     startMatchmaking,
     cancelMatchmaking,
     sendMessage,
+    detachListeners,
   }
 })

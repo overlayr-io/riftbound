@@ -1,10 +1,6 @@
 import * as admin from 'firebase-admin'
 import { env } from './env'
 
-if (env.USE_EMULATOR) {
-  process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080'
-  process.env.FIREBASE_AUTH_EMULATOR_HOST = 'localhost:9099'
-}
 
 const appOptions: admin.AppOptions = {
   projectId: env.FIREBASE_PROJECT_ID,

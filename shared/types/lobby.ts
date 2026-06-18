@@ -9,8 +9,11 @@ export interface LobbyPlayerState {
    */
   teamId: '1' | '2' | null
 }
+export type LobbyType = 'matchmaking' | 'private'
+
 export interface Lobby {
   lobbyId: string
+  type: LobbyType
   host: PlayerId
   lobbyCode: string
   mode: GameMode
