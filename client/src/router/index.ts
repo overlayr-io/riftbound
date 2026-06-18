@@ -8,16 +8,19 @@ const router = createRouter({
   routes: [
     {
       path: '/',
+      name: 'home',
       component: HomeView,
       meta: { layout: 'main' },
     },
     {
       path: '/lobby',
       component: LobbyView,
+      name: 'lobby',
       meta: { layout: 'main' },
     },
     {
       path: '/patch-notes',
+      name: 'patch-notes',
       component: PatchNotesView,
       meta: { layout: 'main' },
     },
