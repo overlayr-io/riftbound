@@ -2,7 +2,7 @@ import {PlayerId} from "./player";
 
 export type GameMode = 'dual' | '2v2' | 'FFA'
 export type GameMatchFormat = 'BO1' | 'BO3' | 'BO5'
-export type GameDeckFormat = 'BO1' | 'BO3' | 'BO5'
+export type GameDeckFormat = 'constructed' | 'sealed' | 'learn_to_play'
 export const MAX_PLAYERS_BY_MODE: Record<GameMode, number> = {
   dual: 2,
   '2v2': 4,
