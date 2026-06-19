@@ -239,7 +239,7 @@ watch(
   top: 50%; left: 50%;
   width: 100%; height: 100%;
   transform: translate(-50%, -50%) rotate(-90deg);
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .slot__card-placeholder {

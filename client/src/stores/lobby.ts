@@ -51,7 +51,13 @@ export const useLobbyStore = defineStore('lobby', () => {
     if (!lobby.value || !isHost.value) return false
     const players = Array.from(lobby.value.players.values())
     const required = MAX_PLAYERS_BY_MODE[lobby.value.mode]
-    return players.length === required && players.every(p => p.isReady)
+    if (players.length !== required || !players.every(p => p.isReady)) return false
+    if (lobby.value.mode === '2v2') {
+      const t1 = players.filter(p => p.teamId === '1').length
+      const t2 = players.filter(p => p.teamId === '2').length
+      return t1 === 2 && t2 === 2
+    }
+    return true
   })
 
   const isReady = computed(() => {

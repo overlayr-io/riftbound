@@ -83,13 +83,12 @@ watch(setup, (step) => {
   startDiceAnimation()
 })
 
-// Tie detected: tiedPlayerIds becomes non-null and my diceRoll was reset to null
+// Tie detected: animate but wait for the manual "RELANCER" button
 watch(
   () => game.tiedPlayerIds,
   (tied) => {
     if (tied && game.myUid && tied.includes(game.myUid)) {
       startDiceAnimation()
-      game.rollDice()
     }
   },
 )

@@ -24,7 +24,8 @@ export class LobbyService {
     const existing = await this.lobbyRepo.findAvailableMatchmaking(mode, deckFormat, maxPlayers)
 
     if (existing) {
-      const state: LobbyPlayerState = { playerName, isReady: false, teamId: null }
+      const teamId = existing.mode === '2v2' ? this.assignTeam(existing) : null
+      const state: LobbyPlayerState = { playerName, isReady: false, teamId }
       await this.lobbyRepo.addPlayer(existing.lobbyId, uid, state)
       await this.msgRepo.add(existing.lobbyId, 'system', `${playerName} a rejoint la partie.`, 'system')
       const lobby = await this.lobbyRepo.findById(existing.lobbyId)
@@ -32,7 +33,7 @@ export class LobbyService {
     }
 
     const lobbyCode = await this.generateUniqueCode()
-    const state: LobbyPlayerState = { playerName, isReady: false, teamId: null }
+    const state: LobbyPlayerState = { playerName, isReady: false, teamId: mode === '2v2' ? '1' : null }
     const lobby = await this.lobbyRepo.create(
       'matchmaking',
       uid,
@@ -53,7 +54,7 @@ export class LobbyService {
     deckFormat: GameDeckFormat,
   ): Promise<Lobby> {
     const lobbyCode = await this.generateUniqueCode()
-    const state: LobbyPlayerState = { playerName, isReady: false, teamId: null }
+    const state: LobbyPlayerState = { playerName, isReady: false, teamId: mode === '2v2' ? '1' : null }
     return this.lobbyRepo.create('private', uid, lobbyCode, mode, matchFormat, deckFormat, {
       uid,
       state,
@@ -69,7 +70,8 @@ export class LobbyService {
     const maxPlayers = MAX_PLAYERS_BY_MODE[lobby.mode]
     if (lobby.players.size >= maxPlayers) throw new Error('LOBBY_FULL')
 
-    const state: LobbyPlayerState = { playerName, isReady: false, teamId: null }
+    const teamId = lobby.mode === '2v2' ? this.assignTeam(lobby) : null
+    const state: LobbyPlayerState = { playerName, isReady: false, teamId }
     await this.lobbyRepo.addPlayer(lobby.lobbyId, uid, state)
     await this.msgRepo.add(lobby.lobbyId, 'system', `${playerName} a rejoint la partie.`, 'system')
 
@@ -151,6 +153,13 @@ export class LobbyService {
     const lobby = await this.lobbyRepo.findById(lobbyId)
     if (!lobby || lobby.type !== 'matchmaking') return
     await this.leave(uid, lobbyId)
+  }
+
+  private assignTeam(lobby: Lobby): '1' | '2' {
+    const players = Array.from(lobby.players.values())
+    const t1 = players.filter(p => p.teamId === '1').length
+    const t2 = players.filter(p => p.teamId === '2').length
+    return t1 <= t2 ? '1' : '2'
   }
 
   private async generateUniqueCode(): Promise<string> {
