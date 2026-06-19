@@ -142,6 +142,13 @@ export class LobbyRepository {
     })
   }
 
+  async setGameId(lobbyId: string, gameId: string): Promise<void> {
+    await this.col.doc(lobbyId).update({
+      gameId,
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+  }
+
   async softDelete(lobbyId: string): Promise<void> {
     await this.col.doc(lobbyId).update({
       deletedAt: FieldValue.serverTimestamp(),

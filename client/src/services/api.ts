@@ -1,5 +1,5 @@
 import { auth } from '@/firebase'
-import type { Lobby, LobbyPlayerState } from '@riftbound/shared'
+import type { Card, Lobby, LobbyPlayerState } from '@riftbound/shared'
 import type { GameMode, GameDeckFormat, GameMatchFormat } from '@riftbound/shared'
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
@@ -14,6 +14,19 @@ async function authHeaders(): Promise<Record<string, string>> {
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers = await authHeaders()
   const res = await fetch(`${BASE_URL}/api/lobbies${path}`, {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  })
+  if (res.status === 204) return undefined as T
+  const data = await res.json()
+  if (!res.ok) throw new ApiError(res.status, data.error ?? 'Unknown error')
+  return data as T
+}
+
+async function requestGame<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const headers = await authHeaders()
+  const res = await fetch(`${BASE_URL}/api/games${path}`, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -96,5 +109,26 @@ export const lobbyApi = {
 
   sendMessage(lobbyId: string, text: string): Promise<void> {
     return request('POST', `/${lobbyId}/messages`, { text })
+  },
+}
+
+export const gameApi = {
+  start(lobbyId: string): Promise<{ gameId: string }> {
+    return requestGame('POST', '/', { lobbyId })
+  },
+
+  submitDeck(gameId: string, roundId: string, legendCard: Card): Promise<void> {
+    return requestGame('PATCH', `/${gameId}/rounds/${roundId}/deck`, { legendCard })
+  },
+
+  selectBattlefield(gameId: string, roundId: string, card: Card): Promise<void> {
+    return requestGame('PATCH', `/${gameId}/rounds/${roundId}/battlefield`, {
+      battlefieldCardId: card.id,
+      battlefieldCard: card,
+    })
+  },
+
+  rollDice(gameId: string, roundId: string): Promise<{ result: number }> {
+    return requestGame('POST', `/${gameId}/rounds/${roundId}/dice`)
   },
 }

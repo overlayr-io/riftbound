@@ -1,4 +1,4 @@
-import {CardId} from "./card";
+import {Card, CardId} from "./card";
 
 export type PlayerId = string;
 export interface Player {
@@ -13,7 +13,9 @@ export interface PlayerState {
    * Below: setup phase only.
    */
   hasSubmittedDeck: boolean
+  legendCard: Card | null
   submittedBattlefield: CardId | null
+  battlefieldCard: Card | null
   diceRoll: number | null
   mulliganCount: number | null
   mulliganDone: boolean

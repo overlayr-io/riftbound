@@ -243,6 +243,18 @@ onUnmounted(() => {
   lobbyStore.detachPresence()
 })
 
+// ── Navigate when game starts (all players, including non-host) ───────────
+watch(
+  () => lobbyStore.lobby?.gameId,
+  (gameId) => {
+    if (!gameId) return
+    if (searchTimer) { clearInterval(searchTimer); searchTimer = null }
+    lobbyStore.detachListeners()
+    lobbyStore.detachPresence()
+    router.push({ name: 'game', params: { gameId } })
+  },
+)
+
 // ── Navigation guard ───────────────────────────────────────────────────────
 const showLeaveConfirm = ref(false)
 

@@ -3,6 +3,7 @@ import HomeView from '@/views/HomeView.vue'
 import LobbyView from '@/views/LobbyView.vue'
 import PatchNotesView from '@/views/PatchNotesView.vue'
 import SettingsView from '@/views/SettingsView.vue'
+import GameView from '@/views/GameView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -18,6 +19,12 @@ const router = createRouter({
       component: LobbyView,
       name: 'lobby',
       meta: { layout: 'main' },
+    },
+    {
+      path: '/game/:gameId',
+      name: 'game',
+      component: GameView,
+      meta: { layout: 'game' },
     },
     {
       path: '/patch-notes',

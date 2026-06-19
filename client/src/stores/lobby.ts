@@ -21,7 +21,7 @@ import type { GameMode, GameDeckFormat, GameMatchFormat } from '@riftbound/share
 import { MAX_PLAYERS_BY_MODE } from '@riftbound/shared'
 import { firestore, rtdb } from '@/firebase'
 import { useAuthStore } from './auth'
-import { lobbyApi, ApiError } from '@/services/api'
+import { lobbyApi, gameApi, ApiError } from '@/services/api'
 
 export const useLobbyStore = defineStore('lobby', () => {
   const authStore = useAuthStore()
@@ -237,8 +237,9 @@ export const useLobbyStore = defineStore('lobby', () => {
   }
 
   async function startGame(): Promise<void> {
-    // TODO: wire to game start
-    console.log('Starting game...')
+    if (!lobby.value) return
+    await gameApi.start(lobby.value.lobbyId)
+    // Navigation is triggered by the LobbyView watcher on lobby.gameId
   }
 
   async function sendMessage(text: string): Promise<void> {

@@ -54,6 +54,7 @@ export interface GameRound {
 
   setup: GameSetupStep
   diceWinnerId: PlayerId | null
+  tiedPlayerIds: PlayerId[] | null
   firstPlayerId: PlayerId | null
   /**
    * 4-player only: the battlefield revealed-and-discarded by the dice winner
