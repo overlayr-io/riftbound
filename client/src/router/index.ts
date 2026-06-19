@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '@/views/HomeView.vue'
 import LobbyView from '@/views/LobbyView.vue'
 import PatchNotesView from '@/views/PatchNotesView.vue'
+import SettingsView from '@/views/SettingsView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -22,6 +23,12 @@ const router = createRouter({
       path: '/patch-notes',
       name: 'patch-notes',
       component: PatchNotesView,
+      meta: { layout: 'main' },
+    },
+    {
+      path: '/settings',
+      name: 'settings',
+      component: SettingsView,
       meta: { layout: 'main' },
     },
   ],
