@@ -77,6 +77,8 @@ export const useGameStore = defineStore('game', () => {
 
   const tiedPlayerIds = computed(() => currentRound.value?.tiedPlayerIds ?? null)
 
+  const bfDisplayOrder = computed(() => currentRound.value?.bfDisplayOrder ?? null)
+
   // ── Listeners ────────────────────────────────────────────────────────────────
 
   function attachRound(gId: string, rId: string) {
@@ -96,6 +98,7 @@ export const useGameStore = defineStore('game', () => {
           tiedPlayerIds: d.tiedPlayerIds ?? null,
           firstPlayerId: d.firstPlayerId ?? null,
           discardedBattlefieldId: d.discardedBattlefieldId ?? null,
+          bfDisplayOrder: d.bfDisplayOrder ?? null,
           winnerId: d.winnerId ?? null,
           currentTurn: d.currentTurn ?? null,
           players: d.players ?? {},
@@ -178,6 +181,21 @@ export const useGameStore = defineStore('game', () => {
     await gameApi.rollDice(gameId.value, currentRoundId.value)
   }
 
+  async function chooseFirstPlayer(chosenPlayerId: string): Promise<void> {
+    if (!gameId.value || !currentRoundId.value) return
+    await gameApi.chooseFirstPlayer(gameId.value, currentRoundId.value, chosenPlayerId)
+  }
+
+  async function discardBattlefield(cardId: string): Promise<void> {
+    if (!gameId.value || !currentRoundId.value) return
+    await gameApi.discardBattlefield(gameId.value, currentRoundId.value, cardId)
+  }
+
+  async function confirmDiscard(): Promise<void> {
+    if (!gameId.value || !currentRoundId.value) return
+    await gameApi.confirmDiscard(gameId.value, currentRoundId.value)
+  }
+
   return {
     gameId,
     mode,
@@ -198,10 +216,14 @@ export const useGameStore = defineStore('game', () => {
     allBFDone,
     allDiceRolled,
     tiedPlayerIds,
+    bfDisplayOrder,
     attachGame,
     detach,
     importDeck,
     selectBattlefield,
     rollDice,
+    chooseFirstPlayer,
+    discardBattlefield,
+    confirmDiscard,
   }
 })

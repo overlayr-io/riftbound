@@ -28,6 +28,7 @@ function docToRound(id: string, data: FirebaseFirestore.DocumentData): GameRound
     tiedPlayerIds: data.tiedPlayerIds ?? null,
     firstPlayerId: data.firstPlayerId ?? null,
     discardedBattlefieldId: data.discardedBattlefieldId ?? null,
+    bfDisplayOrder: data.bfDisplayOrder ?? null,
     winnerId: data.winnerId ?? null,
     currentTurn: data.currentTurn ?? null,
     players: data.players ?? {},
@@ -83,6 +84,7 @@ export class GameRepository {
       tiedPlayerIds: null,
       firstPlayerId: null,
       discardedBattlefieldId: null,
+      bfDisplayOrder: null,
       winnerId: null,
       currentTurn: null,
       players: playerStates,
@@ -126,11 +128,51 @@ export class GameRepository {
     roundId: string,
     diceWinnerId: PlayerId,
     nextSetup: GameSetupStep,
+    bfDisplayOrder?: PlayerId[],
+  ): Promise<void> {
+    const update: Record<string, unknown> = {
+      diceWinnerId,
+      // firstPlayerId is set later: by chooseFirstPlayer (choose_first_player step)
+      // or by pendingDiscard (select_battlefield_discard step)
+      firstPlayerId: null,
+      setup: nextSetup,
+      updatedAt: FieldValue.serverTimestamp(),
+    }
+    if (bfDisplayOrder) update.bfDisplayOrder = bfDisplayOrder
+    await this.col.doc(gameId).collection('rounds').doc(roundId).update(update)
+  }
+
+  async chooseFirstPlayer(
+    gameId: string,
+    roundId: string,
+    firstPlayerId: PlayerId,
   ): Promise<void> {
     await this.col.doc(gameId).collection('rounds').doc(roundId).update({
-      diceWinnerId,
-      firstPlayerId: diceWinnerId,
-      setup: nextSetup,
+      firstPlayerId,
+      setup: 'mulligan' as GameSetupStep,
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+  }
+
+  async pendingDiscard(
+    gameId: string,
+    roundId: string,
+    discardedBattlefieldId: CardId,
+    firstPlayerId: PlayerId,
+  ): Promise<void> {
+    await this.col.doc(gameId).collection('rounds').doc(roundId).update({
+      discardedBattlefieldId,
+      firstPlayerId,
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+  }
+
+  async confirmDiscard(
+    gameId: string,
+    roundId: string,
+  ): Promise<void> {
+    await this.col.doc(gameId).collection('rounds').doc(roundId).update({
+      setup: 'mulligan' as GameSetupStep,
       updatedAt: FieldValue.serverTimestamp(),
     })
   }

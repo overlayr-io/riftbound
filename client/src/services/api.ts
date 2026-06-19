@@ -131,4 +131,16 @@ export const gameApi = {
   rollDice(gameId: string, roundId: string): Promise<{ result: number }> {
     return requestGame('POST', `/${gameId}/rounds/${roundId}/dice`)
   },
+
+  chooseFirstPlayer(gameId: string, roundId: string, chosenPlayerId: string): Promise<void> {
+    return requestGame('POST', `/${gameId}/rounds/${roundId}/first-player`, { chosenPlayerId })
+  },
+
+  discardBattlefield(gameId: string, roundId: string, cardId: string): Promise<void> {
+    return requestGame('POST', `/${gameId}/rounds/${roundId}/discard-battlefield`, { cardId })
+  },
+
+  confirmDiscard(gameId: string, roundId: string): Promise<void> {
+    return requestGame('POST', `/${gameId}/rounds/${roundId}/discard-battlefield/confirm`)
+  },
 }

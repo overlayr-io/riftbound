@@ -13,6 +13,7 @@ const props = defineProps<{
   diceRoll: number | null
   isDiceWinner: boolean
   dicePhase?: boolean
+  isFirstPlayer?: boolean
 }>()
 
 const rolling = ref(false)
@@ -123,6 +124,12 @@ watch(
         <template v-else-if="diceRoll !== null">RÉSULTAT</template>
         <template v-else>DÉ</template>
       </span>
+    </div>
+
+    <!-- First player indicator -->
+    <div v-if="isFirstPlayer !== undefined" class="slot__turn-order" :class="{ 'slot__turn-order--first': isFirstPlayer }">
+      <span class="slot__turn-order__dot" />
+      <span class="slot__turn-order__label">{{ isFirstPlayer ? 'COMMENCE EN PREMIER' : 'COMMENCE EN SECOND' }}</span>
     </div>
   </div>
 </template>
@@ -320,5 +327,51 @@ watch(
   0%   { transform: scale(0.7); opacity: 0.5; }
   60%  { transform: scale(1.15); }
   100% { transform: scale(1); opacity: 1; }
+}
+
+/* First player indicator */
+.slot__turn-order {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 3px 6px;
+  border: 1px solid rgba(90, 110, 130, 0.2);
+  background: rgba(10, 21, 37, 0.5);
+}
+
+.slot__turn-order--first {
+  border-color: rgba(0, 204, 185, 0.35);
+  background: rgba(0, 204, 185, 0.06);
+  animation: first-player-in 0.4s ease-out;
+}
+
+@keyframes first-player-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.slot__turn-order__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #4a6a70;
+  flex-shrink: 0;
+}
+
+.slot__turn-order--first .slot__turn-order__dot {
+  background: #00CCB9;
+  box-shadow: 0 0 4px rgba(0, 204, 185, 0.6);
+}
+
+.slot__turn-order__label {
+  font-size: 6.5px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: #4a6a70;
+}
+
+.slot__turn-order--first .slot__turn-order__label {
+  color: #00CCB9;
 }
 </style>

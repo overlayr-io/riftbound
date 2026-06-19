@@ -52,6 +52,13 @@ const bfRevealed = computed(() => game.allBFDone)
 const myBattlefields = computed(() => game.myDeck?.battlefields ?? [])
 
 const setup = computed(() => game.currentRound?.setup ?? 'deck_selection')
+
+// Keep showing dice_roll UI until the animation finishes, even if the server already advanced
+const effectiveSetup = computed(() =>
+  dicePhase.value && (setup.value === 'choose_first_player' || setup.value === 'select_battlefield_discard')
+    ? 'dice_roll'
+    : setup.value,
+)
 const round = computed(() => game.currentRound?.round ?? 1)
 const matchFormat = computed(() => game.matchFormat ?? 'BO1')
 const mode = computed(() => game.mode ?? 'dual')
@@ -99,6 +106,42 @@ function handleReroll() {
   startDiceAnimation()
   game.rollDice()
 }
+
+// ── choose_first_player ───────────────────────────────────────────────────────
+
+const isDiceWinner = computed(() =>
+  !!(game.currentRound?.diceWinnerId && game.currentRound.diceWinnerId === game.myUid),
+)
+
+const playerChoices = computed(() => {
+  return game.playerIds.map((uid) => {
+    const legendName = game.currentRound?.players[uid]?.legendCard?.name
+    if (uid === game.myUid) return { uid, label: 'Moi' }
+    return { uid, label: legendName ? `Adversaire — ${legendName}` : playerName(uid) }
+  })
+})
+
+function handleChooseFirstPlayer(uid: string) {
+  game.chooseFirstPlayer(uid)
+}
+
+// ── select_battlefield_discard ────────────────────────────────────────────────
+
+const allBFCards = computed(() => {
+  const map: Record<string, import('@riftbound/shared').Card | null> = {}
+  for (const uid of game.playerIds) {
+    map[uid] = game.currentRound?.players[uid]?.battlefieldCard ?? null
+  }
+  return map
+})
+
+function handleDiscardBattlefield(cardId: string) {
+  game.discardBattlefield(cardId)
+}
+
+function handleConfirmDiscard() {
+  if (isDiceWinner.value) game.confirmDiscard()
+}
 </script>
 
 <template>
@@ -127,6 +170,7 @@ function handleReroll() {
           :dice-roll="playerState(uid)?.diceRoll ?? null"
           :is-dice-winner="game.currentRound?.diceWinnerId === uid"
           :dice-phase="dicePhase"
+          :is-first-player="game.currentRound?.firstPlayerId ? game.currentRound.firstPlayerId === uid : undefined"
         />
       </div>
 
@@ -134,7 +178,7 @@ function handleReroll() {
       <div class="game-center">
         <div class="game-center__inner">
           <GameSetupPanel
-            :setup="setup"
+            :setup="effectiveSetup"
             :battlefields="myBattlefields"
             :all-decks-done="game.allDecksDone"
             :all-b-f-done="game.allBFDone"
@@ -142,9 +186,18 @@ function handleReroll() {
             :import-error="game.importError"
             :is-tied="!!(game.tiedPlayerIds && game.myUid && game.tiedPlayerIds.includes(game.myUid))"
             :my-dice-roll="game.myState?.diceRoll ?? null"
+            :is-dice-winner="isDiceWinner"
+            :player-choices="playerChoices"
+            :first-player-id="game.currentRound?.firstPlayerId ?? null"
+            :bf-display-order="game.bfDisplayOrder"
+            :all-b-f-cards="allBFCards"
+            :discarded-b-f-id="game.currentRound?.discardedBattlefieldId ?? null"
             @import-deck="handleImportDeck"
             @select-battlefield="handleSelectBattlefield"
             @reroll="handleReroll"
+            @choose-first-player="handleChooseFirstPlayer"
+            @discard-battlefield="handleDiscardBattlefield"
+            @confirm-discard="handleConfirmDiscard"
           />
         </div>
       </div>
@@ -164,6 +217,7 @@ function handleReroll() {
           :dice-roll="playerState(uid)?.diceRoll ?? null"
           :is-dice-winner="game.currentRound?.diceWinnerId === uid"
           :dice-phase="dicePhase"
+          :is-first-player="game.currentRound?.firstPlayerId ? game.currentRound.firstPlayerId === uid : undefined"
         />
       </div>
     </div>

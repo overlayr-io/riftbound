@@ -61,6 +61,11 @@ export interface GameRound {
    * (since 4 players submit a battlefield each but only 3 are played).
    */
   discardedBattlefieldId: CardId | null
+  /**
+   * 4-player only: shuffled order of playerIds for the discard-BF display.
+   * Set when transitioning to select_battlefield_discard.
+   */
+  bfDisplayOrder: PlayerId[] | null
   winnerId: PlayerId | null
 
   currentTurn: {

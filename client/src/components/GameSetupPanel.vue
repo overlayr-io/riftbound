@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import type { Card, GameSetupStep } from '@riftbound/shared'
 import TitleOrnament from './TitleOrnament.vue'
 import ActionButton from './ActionButton.vue'
+import backCardBlack from '@/assets/img/back_card_black.png'
 
 const props = defineProps<{
   setup: GameSetupStep
@@ -13,13 +14,41 @@ const props = defineProps<{
   importError: string | null
   isTied?: boolean
   myDiceRoll?: number | null
+  // choose_first_player
+  isDiceWinner?: boolean
+  playerChoices?: { uid: string; label: string }[]
+  firstPlayerId?: string | null
+  // select_battlefield_discard
+  bfDisplayOrder?: string[] | null
+  allBFCards?: Record<string, Card | null>
+  discardedBFId?: string | null
 }>()
 
 const emit = defineEmits<{
   importDeck: [text: string]
   selectBattlefield: [card: Card]
   reroll: []
+  chooseFirstPlayer: [uid: string]
+  discardBattlefield: [cardId: string]
+  confirmDiscard: []
 }>()
+
+// ── select_battlefield_discard: track reveal animation ───────────────────────
+const discardRevealActive = ref(false)
+let discardRevealTimer: ReturnType<typeof setTimeout> | null = null
+
+watch(
+  () => props.discardedBFId,
+  (id) => {
+    if (!id) return
+    discardRevealActive.value = true
+    if (discardRevealTimer) clearTimeout(discardRevealTimer)
+    discardRevealTimer = setTimeout(() => {
+      discardRevealActive.value = false
+      emit('confirmDiscard')
+    }, 2800)
+  },
+)
 
 // ── Step 1: Deck import ───────────────────────────────────────────────────────
 const deckText = ref(
@@ -186,6 +215,117 @@ const selectedBFId = ref<string | null>(null)
         </ActionButton>
       </div>
       <p v-else class="dice-hint">Résultats visibles sur les côtés</p>
+    </div>
+  </template>
+
+  <!-- ── Step 4a: Choose first player (2 or 3 players) ─────────────────── -->
+  <template v-else-if="setup === 'choose_first_player'">
+    <div class="panel">
+      <div class="panel__header">
+        <span class="panel__eyebrow">PRÉPARATION</span>
+        <h1 class="panel__title">QUI COMMENCE ?</h1>
+        <TitleOrnament />
+        <p class="panel__sub">
+          <template v-if="isDiceWinner">Choisis le joueur qui commence en premier</template>
+          <template v-else>En attente de la décision du vainqueur…</template>
+        </p>
+      </div>
+
+      <div class="first-player-zone">
+        <template v-if="firstPlayerId">
+          <!-- Decision already made: show result -->
+          <div class="fp-result">
+            <span class="fp-result__label">COMMENCE EN PREMIER</span>
+            <div class="fp-result__name">
+              {{ playerChoices?.find(c => c.uid === firstPlayerId)?.label ?? firstPlayerId }}
+            </div>
+          </div>
+        </template>
+        <template v-else-if="isDiceWinner">
+          <div class="fp-choices">
+            <button
+              v-for="choice in playerChoices"
+              :key="choice.uid"
+              class="fp-card"
+              @click="emit('chooseFirstPlayer', choice.uid)"
+            >
+              <span class="fp-card__label">{{ choice.label }}</span>
+              <span class="fp-card__cta">JOUE EN PREMIER</span>
+            </button>
+          </div>
+        </template>
+        <template v-else>
+          <p class="waiting-zone__msg">
+            En attente du vainqueur<span class="dots"><span>.</span><span>.</span><span>.</span></span>
+          </p>
+        </template>
+      </div>
+
+      <div class="panel__footer">
+        <div class="footer-hint">
+          {{ isDiceWinner ? 'Vous avez gagné le lancer de dés — à vous de choisir' : 'Le vainqueur du dé choisit' }}
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- ── Step 4b: Battlefield discard (4 players) ───────────────────────── -->
+  <template v-else-if="setup === 'select_battlefield_discard'">
+    <div class="panel">
+      <div class="panel__header">
+        <span class="panel__eyebrow">PRÉPARATION</span>
+        <h1 class="panel__title">{{ discardedBFId ? 'CHAMP DÉFAUSSÉ' : 'DÉFAUSSER UN BATTLEFIELD' }}</h1>
+        <TitleOrnament />
+        <p class="panel__sub">
+          <template v-if="discardedBFId">Le champ de bataille est révélé et défaussé</template>
+          <template v-else-if="isDiceWinner">Retournez un champ de bataille pour le défausser</template>
+          <template v-else>En attente du vainqueur du dé…</template>
+        </p>
+      </div>
+
+      <div class="discard-bf-grid">
+        <div
+          v-for="uid in (bfDisplayOrder ?? [])"
+          :key="uid"
+          class="discard-bf-slot"
+          :class="{
+            'discard-bf-slot--clickable': isDiceWinner && !discardedBFId,
+            'discard-bf-slot--discarded': discardedBFId && allBFCards?.[uid]?.id === discardedBFId,
+            'discard-bf-slot--revealed': discardRevealActive && allBFCards?.[uid]?.id === discardedBFId,
+          }"
+          @click="isDiceWinner && !discardedBFId && allBFCards?.[uid]?.id && emit('discardBattlefield', allBFCards![uid]!.id)"
+        >
+          <div class="discard-bf-slot__frame">
+            <template v-if="discardRevealActive && allBFCards?.[uid]?.id === discardedBFId">
+              <!-- Revealed card -->
+              <img
+                v-if="allBFCards?.[uid]?.imageUrl"
+                :src="allBFCards![uid]!.imageUrl"
+                :alt="allBFCards![uid]!.name"
+                class="discard-bf-slot__img"
+              />
+              <div v-else class="discard-bf-slot__placeholder">
+                <span class="discard-bf-slot__name">{{ allBFCards?.[uid]?.name }}</span>
+              </div>
+            </template>
+            <template v-else>
+              <!-- Face-down card (landscape) -->
+              <div class="discard-bf-slot__back">
+                <img :src="backCardBlack" alt="Dos de carte" class="discard-bf-slot__back-img" />
+              </div>
+            </template>
+          </div>
+          <div v-if="isDiceWinner && !discardedBFId" class="discard-bf-slot__hint">DÉFAUSSER</div>
+        </div>
+      </div>
+
+      <div class="panel__footer">
+        <div class="footer-hint">
+          {{ isDiceWinner && !discardedBFId
+            ? 'Cliquez sur une carte pour la retourner et la défausser'
+            : discardedBFId ? 'Carte défaussée — passage au mulligan' : 'Le vainqueur du dé choisit le champ à défausser' }}
+        </div>
+      </div>
     </div>
   </template>
 
@@ -503,4 +643,172 @@ const selectedBFId = ref<string | null>(null)
 .dots span:nth-child(3) { animation-delay: 0.56s; }
 
 @keyframes dot { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+
+/* ── choose_first_player ──────────────────────────────────────────────────── */
+.first-player-zone {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.fp-choices {
+  display: flex;
+  gap: 1rem;
+  width: 100%;
+  justify-content: center;
+}
+
+.fp-card {
+  flex: 1;
+  max-width: 180px;
+  background: rgba(10, 21, 37, 0.9);
+  border: 1px solid rgba(90, 110, 130, 0.3);
+  padding: 1.5rem 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.12s;
+}
+
+.fp-card:hover {
+  border-color: #C8AA6E;
+  background: rgba(200, 170, 110, 0.07);
+  transform: translateY(-2px);
+}
+
+.fp-card__label {
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: #F2E5CD;
+  text-align: center;
+}
+
+.fp-card__cta {
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: #00CCB9;
+}
+
+.fp-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1.5rem 2rem;
+  border: 1px solid rgba(200, 170, 110, 0.3);
+  background: rgba(200, 170, 110, 0.05);
+}
+
+.fp-result__label {
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  color: #00CCB9;
+}
+
+.fp-result__name {
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: #C8AA6E;
+}
+
+/* ── select_battlefield_discard ──────────────────────────────────────────── */
+.discard-bf-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.6rem;
+  width: 100%;
+}
+
+.discard-bf-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.discard-bf-slot--clickable { cursor: pointer; }
+.discard-bf-slot--clickable:hover .discard-bf-slot__frame {
+  border-color: rgba(200, 170, 110, 0.5);
+}
+.discard-bf-slot--clickable:hover .discard-bf-slot__hint {
+  color: #C8AA6E;
+}
+
+.discard-bf-slot__frame {
+  width: 100%;
+  aspect-ratio: 7 / 5;
+  border: 1px solid rgba(90, 110, 130, 0.3);
+  background: rgba(10, 21, 37, 0.9);
+  overflow: hidden;
+  position: relative;
+  perspective: 600px;
+  transition: border-color 0.15s;
+}
+
+.discard-bf-slot--discarded .discard-bf-slot__frame {
+  border-color: #C8AA6E;
+}
+
+.discard-bf-slot--revealed .discard-bf-slot__frame {
+  border-color: #C8AA6E;
+  box-shadow: 0 0 16px rgba(200, 170, 110, 0.25);
+}
+
+.discard-bf-slot__img {
+  width: 100%; height: 100%;
+  object-fit: contain;
+  animation: card-flip-in 0.45s ease-out;
+}
+
+@keyframes card-flip-in {
+  from { opacity: 0; transform: rotateY(-90deg) scale(0.92); }
+  to   { opacity: 1; transform: rotateY(0deg) scale(1); }
+}
+
+.discard-bf-slot__placeholder {
+  width: 100%; height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  animation: card-flip-in 0.45s ease-out;
+}
+
+.discard-bf-slot__name {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #C8AA6E;
+  text-align: center;
+  letter-spacing: 0.06em;
+}
+
+.discard-bf-slot__back {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.discard-bf-slot__back-img {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 140%; height: 140%;
+  transform: translate(-50%, -50%) rotate(90deg);
+  object-fit: contain;
+}
+
+.discard-bf-slot__hint {
+  font-size: 0.48rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: #4a6a70;
+  transition: color 0.15s;
+}
 </style>

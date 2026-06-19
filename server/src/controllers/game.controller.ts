@@ -56,3 +56,46 @@ export async function rollDice(req: Request, res: Response, next: NextFunction) 
     res.json({ result })
   } catch (err) { next(err) }
 }
+
+export async function chooseFirstPlayer(req: Request, res: Response, next: NextFunction) {
+  try {
+    const uid = req.user!.uid
+    const gameId = param(req.params.gameId)
+    const roundId = param(req.params.roundId)
+    const { chosenPlayerId } = req.body
+    if (!chosenPlayerId) { res.status(400).json({ error: 'Missing chosenPlayerId' }); return }
+    await gameService.chooseFirstPlayer(gameId, roundId, uid, chosenPlayerId)
+    res.status(204).send()
+  } catch (err: any) {
+    if (err.status) { res.status(err.status).json({ error: err.message }); return }
+    next(err)
+  }
+}
+
+export async function discardBattlefield(req: Request, res: Response, next: NextFunction) {
+  try {
+    const uid = req.user!.uid
+    const gameId = param(req.params.gameId)
+    const roundId = param(req.params.roundId)
+    const { cardId } = req.body
+    if (!cardId) { res.status(400).json({ error: 'Missing cardId' }); return }
+    await gameService.discardBattlefield(gameId, roundId, uid, cardId)
+    res.status(204).send()
+  } catch (err: any) {
+    if (err.status) { res.status(err.status).json({ error: err.message }); return }
+    next(err)
+  }
+}
+
+export async function confirmDiscard(req: Request, res: Response, next: NextFunction) {
+  try {
+    const uid = req.user!.uid
+    const gameId = param(req.params.gameId)
+    const roundId = param(req.params.roundId)
+    await gameService.confirmDiscard(gameId, roundId, uid)
+    res.status(204).send()
+  } catch (err: any) {
+    if (err.status) { res.status(err.status).json({ error: err.message }); return }
+    next(err)
+  }
+}

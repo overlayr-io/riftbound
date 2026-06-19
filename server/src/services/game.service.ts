@@ -3,6 +3,15 @@ import type { PlayerId } from '@riftbound/shared'
 import { GameRepository } from '../repositories/game.repository'
 import { LobbyRepository } from '../repositories/lobby.repository'
 
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
 export class GameService {
   constructor(
     private readonly gameRepo: GameRepository,
@@ -103,8 +112,14 @@ export class GameService {
 
       if (winners.length === 1) {
         const mode = await this.gameRepo.getMode(gameId)
-        const nextSetup = mode === 'dual' ? 'choose_first_player' : 'select_battlefield_discard'
-        await this.gameRepo.resolveDice(gameId, roundId, winners[0][0], nextSetup)
+        const playerCount = Object.keys(round.players).length
+        const needsDiscard = playerCount >= 4
+        const nextSetup = needsDiscard ? 'select_battlefield_discard' : 'choose_first_player'
+        let bfDisplayOrder: string[] | undefined
+        if (needsDiscard) {
+          bfDisplayOrder = shuffle(Object.keys(round.players))
+        }
+        await this.gameRepo.resolveDice(gameId, roundId, winners[0][0], nextSetup, bfDisplayOrder)
       } else {
         // Still tied — reset their dice and mark them for another roll
         await this.gameRepo.resetTiedPlayers(gameId, roundId, winners.map(([id]) => id))
@@ -112,5 +127,43 @@ export class GameService {
     }
 
     return { result }
+  }
+
+  async chooseFirstPlayer(
+    gameId: string,
+    roundId: string,
+    uid: PlayerId,
+    chosenPlayerId: PlayerId,
+  ): Promise<void> {
+    const round = await this.gameRepo.getRound(gameId, roundId)
+    if (!round || round.setup !== 'choose_first_player') return
+    if (round.diceWinnerId !== uid) throw Object.assign(new Error('NOT_DICE_WINNER'), { status: 403 })
+    if (!round.players[chosenPlayerId]) throw Object.assign(new Error('INVALID_PLAYER'), { status: 400 })
+    await this.gameRepo.chooseFirstPlayer(gameId, roundId, chosenPlayerId)
+  }
+
+  async discardBattlefield(
+    gameId: string,
+    roundId: string,
+    uid: PlayerId,
+    cardId: string,
+  ): Promise<void> {
+    const round = await this.gameRepo.getRound(gameId, roundId)
+    if (!round || round.setup !== 'select_battlefield_discard') return
+    if (round.diceWinnerId !== uid) throw Object.assign(new Error('NOT_DICE_WINNER'), { status: 403 })
+    const ownerEntry = Object.entries(round.players).find(([, p]) => p.submittedBattlefield === cardId)
+    if (!ownerEntry) throw Object.assign(new Error('INVALID_CARD'), { status: 400 })
+    await this.gameRepo.pendingDiscard(gameId, roundId, cardId, uid)
+  }
+
+  async confirmDiscard(
+    gameId: string,
+    roundId: string,
+    uid: PlayerId,
+  ): Promise<void> {
+    const round = await this.gameRepo.getRound(gameId, roundId)
+    if (!round || round.setup !== 'select_battlefield_discard') return
+    if (!round.discardedBattlefieldId) throw Object.assign(new Error('NO_DISCARD_PENDING'), { status: 400 })
+    await this.gameRepo.confirmDiscard(gameId, roundId)
   }
 }
