@@ -166,4 +166,25 @@ export class GameService {
     if (!round.discardedBattlefieldId) throw Object.assign(new Error('NO_DISCARD_PENDING'), { status: 400 })
     await this.gameRepo.confirmDiscard(gameId, roundId)
   }
+
+  async submitMulligan(
+    gameId: string,
+    roundId: string,
+    uid: PlayerId,
+    count: number,
+  ): Promise<void> {
+    if (count < 0 || count > 2) throw Object.assign(new Error('INVALID_MULLIGAN_COUNT'), { status: 400 })
+    await this.gameRepo.updatePlayerState(gameId, roundId, uid, {
+      mulliganCount: count,
+      mulliganDone: true,
+    })
+
+    const round = await this.gameRepo.getRound(gameId, roundId)
+    if (!round || round.setup !== 'mulligan') return
+
+    const allDone = Object.values(round.players).every((p) => p.mulliganDone)
+    if (allDone) {
+      await this.gameRepo.advanceSetup(gameId, roundId, 'completed')
+    }
+  }
 }

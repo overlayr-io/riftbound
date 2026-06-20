@@ -142,6 +142,37 @@ function handleDiscardBattlefield(cardId: string) {
 function handleConfirmDiscard() {
   if (isDiceWinner.value) game.confirmDiscard()
 }
+
+// ── Mulligan ──────────────────────────────────────────────────────────────────
+
+function shuffleArray<T>(arr: T[]): T[] {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+const mulliganHand = ref<import('@riftbound/shared').Card[]>([])
+
+watch(setup, (step) => {
+  if (step !== 'mulligan') return
+  if (!game.myDeck?.mainDeck?.length) return
+  mulliganHand.value = shuffleArray(game.myDeck.mainDeck).slice(0, 4)
+})
+
+const myMulliganDone = computed(() => game.myState?.mulliganDone ?? false)
+const myMulliganCount = computed(() => game.myState?.mulliganCount ?? null)
+const allMulliganDone = computed(() =>
+  game.currentRound
+    ? Object.values(game.currentRound.players).every((p) => p.mulliganDone)
+    : false,
+)
+
+function handleSubmitMulligan(count: number) {
+  game.submitMulligan(count)
+}
 </script>
 
 <template>
@@ -195,9 +226,14 @@ function handleConfirmDiscard() {
             @import-deck="handleImportDeck"
             @select-battlefield="handleSelectBattlefield"
             @reroll="handleReroll"
+            :mulligan-hand="mulliganHand"
+            :my-mulligan-done="myMulliganDone"
+            :my-mulligan-count="myMulliganCount"
+            :all-mulligan-done="allMulliganDone"
             @choose-first-player="handleChooseFirstPlayer"
             @discard-battlefield="handleDiscardBattlefield"
             @confirm-discard="handleConfirmDiscard"
+            @submit-mulligan="handleSubmitMulligan"
           />
         </div>
       </div>

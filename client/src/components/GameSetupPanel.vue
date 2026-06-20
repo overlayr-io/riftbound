@@ -22,6 +22,11 @@ const props = defineProps<{
   bfDisplayOrder?: string[] | null
   allBFCards?: Record<string, Card | null>
   discardedBFId?: string | null
+  // mulligan
+  mulliganHand?: Card[]
+  myMulliganDone?: boolean
+  myMulliganCount?: number | null
+  allMulliganDone?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -31,7 +36,21 @@ const emit = defineEmits<{
   chooseFirstPlayer: [uid: string]
   discardBattlefield: [cardId: string]
   confirmDiscard: []
+  submitMulligan: [count: number]
 }>()
+
+// ── Mulligan: local selection state ──────────────────────────────────────────
+const mulliganSelected = ref<Set<string>>(new Set())
+
+function toggleMulliganCard(cardId: string) {
+  if (mulliganSelected.value.has(cardId)) {
+    mulliganSelected.value.delete(cardId)
+  } else if (mulliganSelected.value.size < 2) {
+    mulliganSelected.value.add(cardId)
+  }
+  // force reactivity
+  mulliganSelected.value = new Set(mulliganSelected.value)
+}
 
 // ── select_battlefield_discard: track reveal animation ───────────────────────
 const discardRevealActive = ref(false)
@@ -325,6 +344,101 @@ const selectedBFId = ref<string | null>(null)
             ? 'Cliquez sur une carte pour la retourner et la défausser'
             : discardedBFId ? 'Carte défaussée — passage au mulligan' : 'Le vainqueur du dé choisit le champ à défausser' }}
         </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- ── Step 5: Mulligan ───────────────────────────────────────────────── -->
+  <template v-else-if="setup === 'mulligan'">
+    <div class="panel mulligan-panel">
+      <!-- Header -->
+      <div class="panel-header">
+        <span class="panel-eyebrow">PRÉPARATION</span>
+        <h1 class="panel-title">MULLIGAN</h1>
+        <div class="title-ornament">
+          <span class="ornament-line" />
+          <span class="ornament-diamond">◆</span>
+          <span class="ornament-line" />
+        </div>
+        <p class="panel-sub">
+          <template v-if="myMulliganDone && !allMulliganDone">
+            En attente des autres joueurs<span class="dots"><span>.</span><span>.</span><span>.</span></span>
+          </template>
+          <template v-else-if="myMulliganDone && allMulliganDone">
+            La partie commence…
+          </template>
+          <template v-else>
+            Sélectionne jusqu'à <span class="text-gold">2 cartes</span> à renvoyer sous ton deck
+          </template>
+        </p>
+      </div>
+
+      <!-- Cards or loading -->
+      <div v-if="(mulliganHand ?? []).length > 0" class="cards-area">
+        <button
+          v-for="card in (mulliganHand ?? [])"
+          :key="card.id"
+          class="mulligan-card"
+          :class="{
+            'mulligan-card--swapped': mulliganSelected.has(card.id),
+            'mulligan-card--locked': myMulliganDone,
+          }"
+          :disabled="myMulliganDone"
+          @click="toggleMulliganCard(card.id)"
+        >
+          <img
+            :src="card.imageUrl || 'https://cdn.piltoverarchive.com/cards/OGN-169.webp?width=95'"
+            :alt="card.name"
+            class="mulligan-card__img"
+          />
+          <div class="mulligan-card__overlay">
+            <div v-if="mulliganSelected.has(card.id)" class="swap-badge">
+              <svg class="swap-badge__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+              </svg>
+              ÉCHANGER
+            </div>
+          </div>
+        </button>
+      </div>
+      <div v-else class="loading-state">
+        <div class="spinner" />
+        <span class="loading-text">Mélange du deck en cours…</span>
+      </div>
+
+      <!-- Footer -->
+      <div class="panel-footer">
+        <div class="swap-counter">
+          <span class="swap-counter__current" :class="{ 'swap-counter__current--active': mulliganSelected.size > 0 }">
+            {{ mulliganSelected.size }}
+          </span>
+          <span class="swap-counter__sep">/</span>
+          <span class="swap-counter__max">2</span>
+          <span class="swap-counter__label">
+            <template v-if="myMulliganDone && (myMulliganCount ?? 0) > 0">
+              → vous piochez {{ myMulliganCount }} carte{{ (myMulliganCount ?? 0) > 1 ? 's' : '' }}
+            </template>
+            <template v-else-if="myMulliganDone">
+              main conservée
+            </template>
+            <template v-else>
+              carte(s) à échanger
+            </template>
+          </span>
+        </div>
+        <button
+          v-if="!myMulliganDone"
+          class="action-btn action-btn--primary"
+          @click="emit('submitMulligan', mulliganSelected.size)"
+        >
+          {{ mulliganSelected.size > 0 ? 'CONFIRMER L\'ÉCHANGE' : 'GARDER MA MAIN' }}
+        </button>
+        <button v-else-if="!allMulliganDone" class="action-btn action-btn--disabled" disabled>
+          EN ATTENTE DES JOUEURS
+        </button>
+        <button v-else class="action-btn action-btn--ready" disabled>
+          PRÊT
+        </button>
       </div>
     </div>
   </template>
@@ -810,5 +924,229 @@ const selectedBFId = ref<string | null>(null)
   letter-spacing: 0.15em;
   color: #4a6a70;
   transition: color 0.15s;
+}
+
+/* ── Mulligan panel ───────────────────────────────────────────────────────── */
+.mulligan-panel {
+  gap: 1rem;
+}
+
+.panel-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  text-align: center;
+}
+
+.panel-eyebrow {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.4em;
+  color: #00CCB9;
+  text-transform: uppercase;
+}
+
+.panel-title {
+  font-size: 1.6rem;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  color: #F2E5CD;
+  line-height: 1;
+  margin: 0;
+}
+
+.title-ornament {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 20rem;
+}
+.ornament-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(200, 170, 110, 0.4));
+}
+.ornament-line:last-child {
+  background: linear-gradient(90deg, rgba(200, 170, 110, 0.4), transparent);
+}
+.ornament-diamond {
+  color: #C8AA6E;
+  font-size: 0.45rem;
+  opacity: 0.7;
+}
+
+.panel-sub {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: #4a6a70;
+  line-height: 1.7;
+  margin: 0;
+}
+.text-gold { color: #C8AA6E; font-weight: 700; }
+
+.cards-area {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex: 1;
+  min-height: 0;
+  align-items: center;
+}
+
+.mulligan-card {
+  position: relative;
+  flex: 1;
+  max-width: 120px;
+  aspect-ratio: 0.714;
+  background: rgba(6, 15, 27, 0.8);
+  border: 1px solid rgba(90, 110, 130, 0.3);
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s, filter 0.15s;
+  padding: 0;
+}
+
+.mulligan-card:hover:not(.mulligan-card--swapped):not(.mulligan-card--locked) {
+  border-color: rgba(200, 170, 110, 0.5);
+  transform: translateY(-6px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+}
+
+.mulligan-card--swapped {
+  border-color: #c0392b;
+  filter: brightness(0.6) sepia(0.3);
+  transform: translateY(4px);
+  box-shadow: 0 0 16px rgba(192, 57, 43, 0.35);
+}
+
+.mulligan-card--locked {
+  cursor: default;
+}
+
+.mulligan-card__img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.mulligan-card__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.swap-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(192, 57, 43, 0.9);
+  border: 1px solid rgba(255, 100, 80, 0.4);
+  font-size: 0.55rem;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  color: #fff;
+}
+
+.swap-badge__icon {
+  width: 12px;
+  height: 12px;
+}
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 3rem 0;
+}
+
+.spinner {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  border: 2px solid rgba(200, 170, 110, 0.2);
+  border-top-color: #C8AA6E;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.loading-text {
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  color: #2a4a50;
+}
+
+.panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(200, 170, 110, 0.1);
+  margin-top: auto;
+  flex-shrink: 0;
+  width: 100%;
+}
+
+.swap-counter {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+.swap-counter__current {
+  font-size: 1.1rem;
+  font-weight: 900;
+  color: #4a6a70;
+  transition: color 0.2s;
+  line-height: 1;
+}
+.swap-counter__current--active { color: #C8AA6E; }
+.swap-counter__sep { font-size: 0.8rem; color: #2a4a50; }
+.swap-counter__max { font-size: 0.8rem; font-weight: 700; color: #2a4a50; }
+.swap-counter__label {
+  font-size: 0.6rem;
+  letter-spacing: 0.15em;
+  color: #2a4a50;
+  margin-left: 0.4rem;
+}
+
+.action-btn {
+  padding: 0.75rem 2rem;
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  border: none;
+  cursor: pointer;
+  transition: filter 0.15s, transform 0.1s;
+  flex-shrink: 0;
+}
+.action-btn--primary {
+  background: linear-gradient(180deg, #1e3252 0%, #060f1b 100%);
+  border: 1.5px solid #C8AA6E;
+  color: #F2E5CD;
+  box-shadow: inset 0 0 16px rgba(200, 170, 110, 0.08);
+}
+.action-btn--primary:hover { filter: brightness(1.2); }
+.action-btn--primary:active { transform: scale(0.98); }
+.action-btn--disabled {
+  background: rgba(6, 15, 27, 0.5);
+  border: 1.5px solid rgba(90, 110, 130, 0.2);
+  color: #2a4a50;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.action-btn--ready {
+  background: rgba(0, 204, 185, 0.06);
+  border: 1.5px solid rgba(0, 204, 185, 0.35);
+  color: #00CCB9;
+  cursor: default;
 }
 </style>

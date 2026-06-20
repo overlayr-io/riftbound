@@ -143,4 +143,8 @@ export const gameApi = {
   confirmDiscard(gameId: string, roundId: string): Promise<void> {
     return requestGame('POST', `/${gameId}/rounds/${roundId}/discard-battlefield/confirm`)
   },
+
+  submitMulligan(gameId: string, roundId: string, count: number): Promise<void> {
+    return requestGame('POST', `/${gameId}/rounds/${roundId}/mulligan`, { count })
+  },
 }

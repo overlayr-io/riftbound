@@ -676,6 +676,7 @@ async function confirmLeave() {
             <div class="panel-divider"/>
 
             <ActionButton
+              v-if="!isHost"
               :variant="isReady ? 'ready' : 'primary'"
               @click="handleReady"
             >

@@ -7,6 +7,7 @@ import {
   chooseFirstPlayer,
   discardBattlefield,
   confirmDiscard,
+  submitMulligan,
 } from '../controllers/game.controller'
 import { requireAuth } from '../middlewares/auth.middleware'
 
@@ -21,5 +22,6 @@ router.post('/:gameId/rounds/:roundId/dice', rollDice)
 router.post('/:gameId/rounds/:roundId/first-player', chooseFirstPlayer)
 router.post('/:gameId/rounds/:roundId/discard-battlefield', discardBattlefield)
 router.post('/:gameId/rounds/:roundId/discard-battlefield/confirm', confirmDiscard)
+router.post('/:gameId/rounds/:roundId/mulligan', submitMulligan)
 
 export default router

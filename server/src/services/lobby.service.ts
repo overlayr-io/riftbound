@@ -33,7 +33,7 @@ export class LobbyService {
     }
 
     const lobbyCode = await this.generateUniqueCode()
-    const state: LobbyPlayerState = { playerName, isReady: false, teamId: mode === '2v2' ? '1' : null }
+    const state: LobbyPlayerState = { playerName, isReady: true, teamId: mode === '2v2' ? '1' : null }
     const lobby = await this.lobbyRepo.create(
       'matchmaking',
       uid,
@@ -54,7 +54,7 @@ export class LobbyService {
     deckFormat: GameDeckFormat,
   ): Promise<Lobby> {
     const lobbyCode = await this.generateUniqueCode()
-    const state: LobbyPlayerState = { playerName, isReady: false, teamId: mode === '2v2' ? '1' : null }
+    const state: LobbyPlayerState = { playerName, isReady: true, teamId: mode === '2v2' ? '1' : null }
     return this.lobbyRepo.create('private', uid, lobbyCode, mode, matchFormat, deckFormat, {
       uid,
       state,

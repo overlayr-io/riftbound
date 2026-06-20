@@ -87,6 +87,21 @@ export async function discardBattlefield(req: Request, res: Response, next: Next
   }
 }
 
+export async function submitMulligan(req: Request, res: Response, next: NextFunction) {
+  try {
+    const uid = req.user!.uid
+    const gameId = param(req.params.gameId)
+    const roundId = param(req.params.roundId)
+    const { count } = req.body
+    if (count === undefined || count === null) { res.status(400).json({ error: 'Missing count' }); return }
+    await gameService.submitMulligan(gameId, roundId, uid, Number(count))
+    res.status(204).send()
+  } catch (err: any) {
+    if (err.status) { res.status(err.status).json({ error: err.message }); return }
+    next(err)
+  }
+}
+
 export async function confirmDiscard(req: Request, res: Response, next: NextFunction) {
   try {
     const uid = req.user!.uid
