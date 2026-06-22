@@ -5,6 +5,8 @@ import {useViewport} from "@/composables/useViewport.ts";
 import {CardLayout, Rect} from "@/types/card.type.ts";
 import {useGameStore} from "@/stores/game.ts";
 
+export const DEFAULT_SEPARATOR = ':'
+
 export function useLayout(cards: readonly CardState[]) {
   const { mode, playerIds } = useGameStore()
   const { width: W, height: H, SIDEBAR_WIDTH } = useViewport()
@@ -20,14 +22,14 @@ export function useLayout(cards: readonly CardState[]) {
     const groups = new Map<ZoneId, CardState[]>()
     for (const c of cards) {
       // key format: "{ownerId}_{zone}" — ownerId never contains '_'
-      const key = `${c.ownerId}:${c.zoneId}`
+      const key = `${c.ownerId}${DEFAULT_SEPARATOR}${c.zoneId}`
       let list = groups.get(key)
       if (!list) groups.set(key, (list = []))
       list.push(c)
     }
 
     for (const [key, list] of groups) {
-      const zone = key.slice(key.indexOf(':') + 1) as ZoneId
+      const zone = key.slice(key.indexOf(DEFAULT_SEPARATOR) + 1) as ZoneId
       // Some zones are shared (no player prefix): fall back to zone-only key
       const rect = zones.value[key] ?? zones.value[zone]
       if (!rect) continue
@@ -75,7 +77,7 @@ export function useLayout(cards: readonly CardState[]) {
   const playersZone = computed<Record<string, Rect>>(() => {
     const w = toValue(W)
     const h = toValue(H)
-    // const [p1, p2, p3, p4] = playerIds
+    const [p1, p2, p3, p4] = playerIds
 
     /*if(mode === 'dual') {
       if(p1 && p2) {
@@ -93,8 +95,8 @@ export function useLayout(cards: readonly CardState[]) {
 
     }*/
     return {
-      'p1-zone': { x: 0, y: 0,     w, h: h / 2 },
-      'p2-zone': { x: 0, y: h / 2, w, h: h / 2 },
+      [`${p1}${DEFAULT_SEPARATOR}zone`]: { x: 0, y: 0,     w, h: h / 2 },
+      [`${p2}${DEFAULT_SEPARATOR}zone`]: { x: 0, y: h / 2, w, h: h / 2 },
     }
   })
 
