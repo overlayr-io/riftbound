@@ -1,32 +1,78 @@
+<script lang="ts" setup>
+
+import GameSidebarDual from "@/components/game/GameSidebarDual.vue";
+import CardView from "@/components/game/CardView.vue";
+import {useGameStore} from "@/stores/game.ts";
+import {useLayout} from "@/composables/useLayout.ts";
+import ZoneView from "@/components/game/ZoneView.vue";
+
+
+// get cards from game store
+const { } = useGameStore()
+const { zones, layouts, playersZone } = useLayout([])
+
+</script>
+
 <template>
-  <div class="board-placeholder">
-    <span class="board-placeholder__label">PLATEAU — DUEL</span>
-    <p class="board-placeholder__sub">En cours de développement</p>
+  <div class="w-screen h-screen flex bg-[#0a1628]">
+    <GameSidebarDual/>
+
+    <div class="flex-1">
+
+      <!-- Players zone     -->
+      <div class="players-layer">
+        <div
+            v-for="key in Object.keys(playersZone)"
+            :key="key"
+            class="player-zone"
+            :style="{
+          left:   playersZone[key].x + 'px',
+          top:    playersZone[key].y + 'px',
+          width:  playersZone[key].w + 'px',
+          height: playersZone[key].h + 'px',
+        }"
+        />
+      </div>
+
+      <!-- Zones zone     -->
+      <div class="zones-layer" style="z-index:2">
+        <ZoneView
+            v-for="key in Object.keys(zones)"
+            :key="key"
+            :rect="zones[key]"
+        />
+      </div>
+
+      <!-- Cards zone     -->
+      <div class="cards-layer" style="z-index:3">
+        <template v-for="(card, i) in []" :key="i">
+          <CardView
+              v-if="layouts.get(card.id)"
+              :card="card"
+              :layout="layouts.get(card.id)!"
+          />
+        </template>
+
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.board-placeholder {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  color: #4a6a70;
+.players-layer {
+  position: fixed;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
 }
-
-.board-placeholder__label {
-  font-size: 0.7rem;
-  font-weight: 900;
-  letter-spacing: 0.3em;
-  color: #C8AA6E;
+.zones-layer {
+  position: fixed;
+  z-index: 2;
+  inset: 0;
 }
-
-.board-placeholder__sub {
-  font-size: 0.6rem;
-  letter-spacing: 0.1em;
-  color: #4a6a70;
-  margin: 0;
+.cards-layer {
+  position: fixed;
+  z-index: 3;
+  inset: 0;
 }
 </style>

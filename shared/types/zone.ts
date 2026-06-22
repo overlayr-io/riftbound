@@ -9,9 +9,9 @@ export type PlayerZoneId =
   | 'base'
   | 'runes'
   | 'selected_battlefield'
-  | 'battlefield_owner'
-  | 'battlefield_opponent'
 
 export type ZoneId =
   | PlayerZoneId
+  | 'battlefield_owner'
+  | 'battlefield_opponent'
   | 'stack'
