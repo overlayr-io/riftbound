@@ -1,18 +1,23 @@
 import {useViewport} from "@/composables/useViewport.ts";
 import {computed} from "vue";
 
+export const OUTSIDE_MARGIN = 7
+export const INSIDE_MARGIN = 4
+
+const CARD_ASPECT = 118 / 85
+
 export const DEFAULT_CARD_RATIO = 85 / 118
-export const DEFAULT_SPACING = 6
-export const DEFAULT_ASPECT_RATIO = 4
-export const DEFAULT_CARD_TO_SHOW = 5
+export const DEFAULT_CARD_TO_SHOW = 5.6
 
 export function useCardSize() {
   const { height } = useViewport()
 
   const cardDefaultHeight = computed(() => {
-    return (height.value - DEFAULT_SPACING + DEFAULT_ASPECT_RATIO) / (DEFAULT_CARD_TO_SHOW + DEFAULT_SPACING) - 14
+    const h = height.value
+    return (h - 6 * OUTSIDE_MARGIN + 4 * CARD_ASPECT - INSIDE_MARGIN) / (DEFAULT_CARD_TO_SHOW + CARD_ASPECT) - 14
   })
-  const cardDefaultWidth = computed(() => cardDefaultHeight.value * DEFAULT_CARD_RATIO)
+
+  const cardDefaultWidth = computed(() => Math.round(cardDefaultHeight.value * DEFAULT_CARD_RATIO))
 
   return {
     cardH: cardDefaultHeight,

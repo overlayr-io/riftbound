@@ -1,6 +1,6 @@
 import {CardState, PlayerZoneId, ZoneId} from "@riftbound/shared";
 import {computed, toValue} from "vue";
-import {DEFAULT_CARD_RATIO, useCardSize} from "@/composables/useCardSize.ts";
+import {DEFAULT_CARD_RATIO, INSIDE_MARGIN, OUTSIDE_MARGIN, useCardSize} from "@/composables/useCardSize.ts";
 import {useViewport} from "@/composables/useViewport.ts";
 import {CardLayout, Rect} from "@/types/card.type.ts";
 import {useGameStore} from "@/stores/game.ts";
@@ -13,9 +13,7 @@ export function useLayout(cards: readonly CardState[]) {
   const { cardW, cardH } = useCardSize()
 
   const zones = computed<Record<string, Rect>>(() => {
-    const OUTSIDE_MARGIN = 7
     const GAP = 5
-    const INSIDE_MARGIN = 4
 
     const LEFT_X = SIDEBAR_WIDTH + OUTSIDE_MARGIN
 
