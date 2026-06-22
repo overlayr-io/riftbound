@@ -167,6 +167,10 @@ export class GameService {
     await this.gameRepo.confirmDiscard(gameId, roundId)
   }
 
+  async devSkipSetup(gameId: string, roundId: string): Promise<void> {
+    await this.gameRepo.devSkipSetup(gameId, roundId)
+  }
+
   async submitMulligan(
     gameId: string,
     roundId: string,

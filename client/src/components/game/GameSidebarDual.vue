@@ -1,9 +1,13 @@
 <script setup lang="ts">
 
+import {useViewport} from "@/composables/useViewport.ts";
+
+const { SIDEBAR_WIDTH } = useViewport()
+
 </script>
 
 <template>
-<div class="sidebar">
+<div class="sidebar" :style="{ width: `${SIDEBAR_WIDTH}px` }">
   sidebar
 </div>
 </template>
@@ -12,7 +16,6 @@
 
 .sidebar {
   @apply flex flex-col items-center z-50 shrink-0;
-  width: 3rem;
   background: linear-gradient(180deg, #060f1b 0%, #040a14 100%);
   border-right: 1px solid rgba(200, 170, 110, 0.1);
   padding: 0.5rem 0;

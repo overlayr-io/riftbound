@@ -201,6 +201,11 @@ export const useGameStore = defineStore('game', () => {
     await gameApi.submitMulligan(gameId.value, currentRoundId.value, count)
   }
 
+  async function devSkipSetup(): Promise<void> {
+    if (!gameId.value || !currentRoundId.value) return
+    await gameApi.devSkipSetup(gameId.value, currentRoundId.value)
+  }
+
   return {
     gameId,
     mode,
@@ -231,5 +236,6 @@ export const useGameStore = defineStore('game', () => {
     discardBattlefield,
     confirmDiscard,
     submitMulligan,
+    devSkipSetup,
   }
 })

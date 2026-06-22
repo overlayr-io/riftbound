@@ -1,6 +1,8 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 
 export function useViewport() {
+  const SIDEBAR_WIDTH = 52
+
   const width = ref(window.innerWidth)
   const height = ref(window.innerHeight)
   let raf = 0
@@ -20,5 +22,5 @@ export function useViewport() {
     if (raf) cancelAnimationFrame(raf)
   })
 
-  return { width, height }
+  return { width, height, SIDEBAR_WIDTH }
 }

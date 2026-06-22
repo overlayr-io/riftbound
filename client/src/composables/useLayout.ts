@@ -7,7 +7,7 @@ import {useGameStore} from "@/stores/game.ts";
 
 export function useLayout(cards: readonly CardState[]) {
   const { mode, playerIds } = useGameStore()
-  const { width: W, height: H } = useViewport()
+  const { width: W, height: H, SIDEBAR_WIDTH } = useViewport()
   const { cardW, cardH } = useCardSize()
 
   const zones = computed<Record<string, Rect>>(() => {

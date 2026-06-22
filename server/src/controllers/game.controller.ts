@@ -114,3 +114,15 @@ export async function confirmDiscard(req: Request, res: Response, next: NextFunc
     next(err)
   }
 }
+
+export async function devSkipSetup(req: Request, res: Response, next: NextFunction) {
+  try {
+    const gameId = param(req.params.gameId)
+    const roundId = param(req.params.roundId)
+    await gameService.devSkipSetup(gameId, roundId)
+    res.status(204).send()
+  } catch (err: any) {
+    if (err.status) { res.status(err.status).json({ error: err.message }); return }
+    next(err)
+  }
+}

@@ -173,6 +173,8 @@ const allMulliganDone = computed(() =>
 function handleSubmitMulligan(count: number) {
   game.submitMulligan(count)
 }
+
+const isDev = import.meta.env.DEV
 </script>
 
 <template>
@@ -257,6 +259,11 @@ function handleSubmitMulligan(count: number) {
         />
       </div>
     </div>
+
+    <!-- DEV ONLY: skip all setup steps instantly -->
+    <button v-if="isDev" class="dev-skip-btn" @click="game.devSkipSetup()">
+      ⚡ DEV SKIP
+    </button>
   </div>
 
   <!-- ── Post-setup: game board ──────────────────────────────────────────── -->
@@ -328,4 +335,22 @@ function handleSubmitMulligan(count: number) {
   width: 80%;
   height: 100%;
 }
+
+.dev-skip-btn {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 9999;
+  padding: 8px 16px;
+  background: #ff4500;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0.85;
+}
+.dev-skip-btn:hover { opacity: 1; }
 </style>

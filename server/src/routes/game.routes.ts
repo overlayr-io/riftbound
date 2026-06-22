@@ -8,8 +8,10 @@ import {
   discardBattlefield,
   confirmDiscard,
   submitMulligan,
+  devSkipSetup,
 } from '../controllers/game.controller'
 import { requireAuth } from '../middlewares/auth.middleware'
+import { env } from '../config/env'
 
 const router = Router()
 
@@ -23,5 +25,9 @@ router.post('/:gameId/rounds/:roundId/first-player', chooseFirstPlayer)
 router.post('/:gameId/rounds/:roundId/discard-battlefield', discardBattlefield)
 router.post('/:gameId/rounds/:roundId/discard-battlefield/confirm', confirmDiscard)
 router.post('/:gameId/rounds/:roundId/mulligan', submitMulligan)
+
+if (env.NODE_ENV !== 'production') {
+  router.post('/:gameId/rounds/:roundId/dev-skip', devSkipSetup)
+}
 
 export default router

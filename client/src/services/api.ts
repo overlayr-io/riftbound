@@ -147,4 +147,8 @@ export const gameApi = {
   submitMulligan(gameId: string, roundId: string, count: number): Promise<void> {
     return requestGame('POST', `/${gameId}/rounds/${roundId}/mulligan`, { count })
   },
+
+  devSkipSetup(gameId: string, roundId: string): Promise<void> {
+    return requestGame('POST', `/${gameId}/rounds/${roundId}/dev-skip`)
+  },
 }

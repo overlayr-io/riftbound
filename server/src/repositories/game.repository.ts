@@ -196,4 +196,44 @@ export class GameRepository {
     const snap = await this.col.doc(gameId).get()
     return (snap.data()?.mode as GameMode) ?? 'dual'
   }
+
+  async devSkipSetup(
+    gameId: string,
+    roundId: string,
+  ): Promise<void> {
+    const roundRef = this.col.doc(gameId).collection('rounds').doc(roundId)
+    const snap = await roundRef.get()
+    if (!snap.exists) throw Object.assign(new Error('ROUND_NOT_FOUND'), { status: 404 })
+    const data = snap.data()!
+    const playerIds = Object.keys(data.players ?? {}) as PlayerId[]
+    const diceWinnerId = playerIds[Math.floor(Math.random() * playerIds.length)]
+
+    const fakeCard = (uid: PlayerId, type: 'legend' | 'battlefield'): Card => ({
+      id: `dev-${type}-${uid}`,
+      baseCardId: `dev-${type}`,
+      name: type === 'legend' ? 'Légende Dev' : 'Champ Dev',
+      type,
+      imageUrl: '',
+    })
+
+    const update: Record<string, unknown> = {
+      setup: 'completed' as GameSetupStep,
+      diceWinnerId,
+      firstPlayerId: diceWinnerId,
+      tiedPlayerIds: null,
+      updatedAt: FieldValue.serverTimestamp(),
+    }
+
+    for (const uid of playerIds) {
+      update[`players.${uid}.hasSubmittedDeck`] = true
+      update[`players.${uid}.legendCard`] = fakeCard(uid, 'legend')
+      update[`players.${uid}.submittedBattlefield`] = `dev-battlefield-${uid}`
+      update[`players.${uid}.battlefieldCard`] = fakeCard(uid, 'battlefield')
+      update[`players.${uid}.diceRoll`] = Math.floor(Math.random() * 20) + 1
+      update[`players.${uid}.mulliganCount`] = 0
+      update[`players.${uid}.mulliganDone`] = true
+    }
+
+    await roundRef.update(update)
+  }
 }
