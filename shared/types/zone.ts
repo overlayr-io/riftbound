@@ -14,4 +14,5 @@ export type ZoneId =
   | PlayerZoneId
   | 'battlefield_owner'
   | 'battlefield_opponent'
+  | 'baron_nashor'
   | 'stack'

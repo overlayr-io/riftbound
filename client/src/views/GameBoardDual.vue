@@ -39,6 +39,7 @@ const { zones, layouts, playersZone } = useLayout([])
         <ZoneView
             v-for="key in Object.keys(zones)"
             :key="key"
+            :id="key"
             :rect="zones[key]"
         />
       </div>
