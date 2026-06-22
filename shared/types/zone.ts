@@ -8,7 +8,7 @@ export type PlayerZoneId =
   | 'champion'
   | 'base'
   | 'runes'
-  | 'selected_battlefield'
+  | 'battlefield'
 
 export type ZoneId =
   | PlayerZoneId

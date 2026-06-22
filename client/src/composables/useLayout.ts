@@ -1,6 +1,6 @@
-import {CardState, ZoneId} from "@riftbound/shared";
+import {CardState, PlayerZoneId, ZoneId} from "@riftbound/shared";
 import {computed, toValue} from "vue";
-import {useCardSize} from "@/composables/useCardSize.ts";
+import {DEFAULT_CARD_RATIO, useCardSize} from "@/composables/useCardSize.ts";
 import {useViewport} from "@/composables/useViewport.ts";
 import {CardLayout, Rect} from "@/types/card.type.ts";
 import {useGameStore} from "@/stores/game.ts";
@@ -8,12 +8,62 @@ import {useGameStore} from "@/stores/game.ts";
 export const DEFAULT_SEPARATOR = ':'
 
 export function useLayout(cards: readonly CardState[]) {
-  const { mode, playerIds } = useGameStore()
+  const { mode, playerIds, opponents, myUid } = useGameStore()
   const { width: W, height: H, SIDEBAR_WIDTH } = useViewport()
   const { cardW, cardH } = useCardSize()
 
   const zones = computed<Record<string, Rect>>(() => {
-    return {}
+    const OUTSIDE_MARGIN = 7
+    const GAP = 5
+    const INSIDE_MARGIN = 4
+
+    const LEFT_X = SIDEBAR_WIDTH + OUTSIDE_MARGIN
+
+    const cardSlot = {
+      w: Math.round(cardH.value * DEFAULT_CARD_RATIO) + INSIDE_MARGIN,
+      h: cardH.value + INSIDE_MARGIN,
+    }
+
+    const BASE = { w: 0, y: 0 }
+    const HAND = { w: 0, y: 0 }
+    const RUNES = { w: 0, y: 0 }
+    const battlefield = { w: 0, y: 0 }
+
+
+    const top: Record<PlayerZoneId, Rect> = {
+      banish: {       x: LEFT_X,                                        y: 0,                   ...cardSlot  },
+      discard: {      x: LEFT_X + cardSlot.w + GAP,                     y: 0,                   ...cardSlot  },
+      main_deck: {    x: LEFT_X + cardSlot.w + GAP + cardSlot.w + GAP,  y: 0,                   ...cardSlot  },
+      hand: {         x: 0,                                             y: 0,                   w: HAND.w, h: HAND.y },
+      runes_deck: {   x: 0,                                             y: 0,                   ...cardSlot  },
+      legend: {       x: 0,                                             y: 0,                   ...cardSlot  },
+      champion: {     x: 0,                                             y: 0,                   ...cardSlot  },
+      base: {         x: 0,                                             y: 0,                   w: BASE.w, h: BASE.y  },
+      runes: {        x: 0,                                             y: 0,                   w: RUNES.w, h: RUNES.y  },
+      battlefield: {  x: 0,                                             y: 0,                   w: battlefield.w, h: battlefield.y  },
+    }
+
+    const mirror = ({ x, y, w: zw, h: zh}: Rect): Rect => ({
+      x: W.value - x - zw,
+      y: H.value - y - zh,
+      w: zw,
+      h: zh,
+    })
+
+    const local = myUid
+    const opponent = opponents[0]
+
+    const result: Record<string, Rect> = {}
+    for (const [k, v] of Object.entries(top)) result[`${opponent}_${k}`] = v
+    for (const [k, v] of Object.entries(top)) result[`${local}_${k}`]  = mirror(v)
+
+    result['stack'] = { x: 0, y: 0, w: 0, h: 0 }
+    result[`${local}${DEFAULT_SEPARATOR}battlefield_owner`] = { x: 0, y: 0, w: 0, h: 0 }
+    result[`${local}${DEFAULT_SEPARATOR}battlefield_opponent`] = { x: 0, y: 0, w: 0, h: 0 }
+    result[`${opponent}${DEFAULT_SEPARATOR}battlefield_opponent`] = { x: 0, y: 0, w: 0, h: 0 }
+    result[`${opponent}${DEFAULT_SEPARATOR}battlefield_opponent`] = { x: 0, y: 0, w: 0, h: 0 }
+
+    return result
   })
 
   const layouts = computed<Map<ZoneId, CardLayout>>(() => {
@@ -52,7 +102,7 @@ export function useLayout(cards: readonly CardState[]) {
         case 'champion':
           break
 
-        case 'selected_battlefield':
+        case 'battlefield':
           break
 
         case 'battlefield_opponent':
