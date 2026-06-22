@@ -31,8 +31,12 @@ export function useLayout(cards: readonly CardState[]) {
     const bfH = H.value - 3.60 * cardSlot.h - 4 * GAP
 
     const STACK = { w: cardW.value * 3 }
-    // Two battlefields + stack fill the board width: LEFT_X … W - OUTSIDE_MARGIN
-    const bfW = (W.value - OUTSIDE_MARGIN - LEFT_X - 2 * GAP - STACK.w) / 2
+
+    // Baron Nashor adds a 3rd battlefield between local and opponent
+    const hasBaronNashor = false
+    const bfCount = hasBaronNashor ? 3 : 2
+    // bfCount battlefields + bfCount gaps + stack fill: LEFT_X … W - OUTSIDE_MARGIN
+    const bfW = (W.value - OUTSIDE_MARGIN - LEFT_X - bfCount * GAP - STACK.w) / bfCount
 
     // Deck zones (banish, discard, main_deck, runes_deck) are 10% narrower than a full card slot
     const deckSlot = { w: Math.round(cardSlot.w * 0.90), h: cardSlot.h }
@@ -83,55 +87,44 @@ export function useLayout(cards: readonly CardState[]) {
     for (const [k, v] of Object.entries(top)) result[`${opponent}_${k}`] = v
     for (const [k, v] of Object.entries(top)) result[`${local}_${k}`]    = mirror(v)
 
-    // Large battlefield playing areas
-    result[`${local}${SEPARATOR}battlefield`] = {
-      x: LEFT_X, y: ybf, w: bfW, h: bfH,
+    // Emit all 4 zones for one battlefield column.
+    // ownerAtBottom: true → local orientation (owner row at bottom, facing centre)
+    //                false → opponent orientation (owner row at top, facing centre)
+    const emitBattlefield = (prefix: string, x: number, ownerAtBottom: boolean) => {
+      result[`${prefix}${SEPARATOR}battlefield`] = { x, y: ybf, w: bfW, h: bfH }
+      result[`${prefix}_battlefield`] = {
+        x: x + (bfW - bfCardH) / 2,
+        y: ybf + (bfH - bfCardW) / 2,
+        w: bfCardH,
+        h: bfCardW,
+      }
+      result[`${prefix}${SEPARATOR}battlefield_owner`] = {
+        x: x + GAP,
+        y: ownerAtBottom ? ybf + bfH - cardSlot.h - INSIDE_MARGIN : ybf + INSIDE_MARGIN,
+        w: bfW - 2 * GAP,
+        h: cardSlot.h,
+      }
+      result[`${prefix}${SEPARATOR}battlefield_opponent`] = {
+        x: x + GAP,
+        y: ownerAtBottom ? ybf + INSIDE_MARGIN : ybf + bfH - cardSlot.h - INSIDE_MARGIN,
+        w: bfW - 2 * GAP,
+        h: cardSlot.h,
+      }
     }
-    result[`${opponent}${SEPARATOR}battlefield`] = {
-      x: LEFT_X + bfW + GAP, y: ybf, w: bfW, h: bfH,
+
+    const localX    = LEFT_X
+    const opponentX = LEFT_X + (hasBaronNashor ? 2 : 1) * (bfW + GAP)
+
+    emitBattlefield(local,    localX,    true)
+    emitBattlefield(opponent, opponentX, false)
+
+    if (hasBaronNashor) {
+      const baronX = LEFT_X + bfW + GAP
+      emitBattlefield('baron_nashor', baronX, true)
     }
+
     result['stack'] = {
       x: W.value - OUTSIDE_MARGIN - STACK.w, y: ybf, w: STACK.w, h: bfH,
-    }
-
-    // Battlefield card-selection indicator — 10% smaller, centered in each player's playing area
-    result[`${local}_battlefield`] = {
-      x: LEFT_X + (bfW - bfCardH) / 2,
-      y: ybf + (bfH - bfCardW) / 2,
-      w: bfCardH,
-      h: bfCardW,
-    }
-    result[`${opponent}_battlefield`] = {
-      x: LEFT_X + bfW + GAP + (bfW - bfCardH) / 2,
-      y: ybf + (bfH - bfCardW) / 2,
-      w: bfCardH,
-      h: bfCardW,
-    }
-
-    // Sub-zones inside each battlefield (rows where cards are actually played)
-    result[`${local}${SEPARATOR}battlefield_owner`] = {
-      x: LEFT_X + GAP,
-      y: ybf + bfH - cardSlot.h - INSIDE_MARGIN,
-      w: bfW - 2 * GAP,
-      h: cardSlot.h,
-    }
-    result[`${local}${SEPARATOR}battlefield_opponent`] = {
-      x: LEFT_X + GAP,
-      y: ybf + INSIDE_MARGIN,
-      w: bfW - 2 * GAP,
-      h: cardSlot.h,
-    }
-    result[`${opponent}${SEPARATOR}battlefield_owner`] = {
-      x: LEFT_X + bfW + GAP + GAP,
-      y: ybf + INSIDE_MARGIN,
-      w: bfW - 2 * GAP,
-      h: cardSlot.h,
-    }
-    result[`${opponent}${SEPARATOR}battlefield_opponent`] = {
-      x: LEFT_X + bfW + GAP + GAP,
-      y: ybf + bfH - cardSlot.h - INSIDE_MARGIN,
-      w: bfW - 2 * GAP,
-      h: cardSlot.h,
     }
 
     return result
