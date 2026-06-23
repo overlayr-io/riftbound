@@ -93,7 +93,7 @@ const NON_DRAGGABLE_ZONES = new Set(['legend'])
 
 function toggleExhausted() {
   if (!EXHAUSTABLE_ZONES.has(props.card.zoneId)) return
-  actions?.toggleExhausted(props.card.cardId)
+  actions?.applyAction({ type: 'TOGGLE_EXHAUSTED', playerId: props.card.controllerId, cardId: props.card.cardId })
 }
 
 function onPointerDown(e: PointerEvent) {

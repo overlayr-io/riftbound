@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { doc, onSnapshot, updateDoc, serverTimestamp, type Unsubscribe } from 'firebase/firestore'
-import type { Card, CardVisibleTo, DeckList, GameMode, GameMatchFormat, GameDeckFormat, GameRound, ZoneId } from '@riftbound/shared'
+import type { Card, CardVisibleTo, DeckList, GameAction, GameMode, GameMatchFormat, GameDeckFormat, GameRound, ZoneId } from '@riftbound/shared'
 import type { PlayerId } from '@riftbound/shared'
 import { firestore } from '@/firebase'
 import { useAuthStore } from './auth'
@@ -227,94 +227,138 @@ export const useGameStore = defineStore('game', () => {
 
   const DECK_ZONES = new Set<ZoneId>(['main_deck', 'runes_deck'])
 
-  function resolveVisibility(cardId: string, toZoneId: ZoneId): CardVisibleTo | null {
+  function resolveVisibility(cardId: string, toZoneId: ZoneId): CardVisibleTo {
     const card = currentRound.value?.cards[cardId]
-    if (!card) return null
+    // Card already hidden by the player → keep hidden wherever it goes
+    if (card?.state.visibleTo === 'NOBODY' && !DECK_ZONES.has(card.zoneId)) return 'NOBODY'
+    // Deck zones → always hidden
     if (DECK_ZONES.has(toZoneId)) return 'NOBODY'
-    if (toZoneId === 'hand') {
-      // Don't reveal a card that was explicitly hidden by the player
-      return card.state.visibleTo === 'NOBODY' && !DECK_ZONES.has(card.zoneId) ? 'NOBODY' : 'SELF'
-    }
-    return null
+    // Going to hand → visible only to self
+    if (toZoneId === 'hand') return 'SELF'
+    // Everywhere else (battlefield, runes, discard, banish…) → visible to all
+    return 'ALL'
   }
 
-  function moveCard(cardId: string, toZoneId: ZoneId) {
+  // Core primitive — all game actions funnel through this
+  function commitMove(cardId: string, toZoneId: ZoneId, overrideVisibility?: CardVisibleTo) {
     const round = currentRound.value
     if (!round?.cards[cardId]) return
     const ref = roundRef()
     if (!ref) return
 
-    const targetCards = Object.values(round.cards).filter(c => c.zoneId === toZoneId)
-    const newOrder = targetCards.length > 0 ? Math.max(...targetCards.map(c => c.order)) + 1 : 0
-    const newVisibility = resolveVisibility(cardId, toZoneId)
+    const newOrder = Math.max(-1, ...Object.values(round.cards).filter(c => c.zoneId === toZoneId).map(c => c.order)) + 1
+    const newVisibility = overrideVisibility ?? resolveVisibility(cardId, toZoneId)
+    const isHidden = newVisibility === 'NOBODY'
 
     round.cards[cardId] = {
       ...round.cards[cardId],
       zoneId: toZoneId,
       order: newOrder,
-      ...(newVisibility ? { state: { ...round.cards[cardId].state, visibleTo: newVisibility } } : {}),
+      state: {
+        ...round.cards[cardId].state,
+        visibleTo: newVisibility,
+        exhausted: isHidden ? round.cards[cardId].state.exhausted : true,
+      },
     }
 
     updateDoc(ref, {
       [`cards.${cardId}.zoneId`]: toZoneId,
       [`cards.${cardId}.order`]: newOrder,
-      ...(newVisibility ? { [`cards.${cardId}.state.visibleTo`]: newVisibility } : {}),
+      [`cards.${cardId}.state.visibleTo`]: newVisibility,
+      ...(!isHidden ? { [`cards.${cardId}.state.exhausted`]: true } : {}),
       _updatedBy: sessionId,
       updatedAt: serverTimestamp(),
     }).catch(console.error)
   }
 
-  function drawTopCard(ownerId: string, fromZone: ZoneId, toZone: ZoneId) {
+  function applyAction(action: GameAction) {
     const round = currentRound.value
     if (!round) return
     const ref = roundRef()
     if (!ref) return
 
-    const topCard = Object.values(round.cards)
-      .filter(c => c.ownerId === ownerId && c.zoneId === fromZone)
-      .sort((a, b) => b.order - a.order)[0]
-    if (!topCard) return
+    switch (action.type) {
+      case 'DRAW_CARD':
+        commitMove(action.cardId, 'hand', 'SELF')
+        break
 
-    const toCards = Object.values(round.cards)
-      .filter(c => c.ownerId === ownerId && c.zoneId === toZone)
-    const newOrder = toCards.length > 0 ? Math.max(...toCards.map(c => c.order)) + 1 : 0
+      case 'CHANNEL_CARD':
+        commitMove(action.cardId, 'runes', 'ALL')
+        break
 
-    // Optimistic update → card animates instantly from deck to hand
-    round.cards[topCard.cardId] = {
-      ...round.cards[topCard.cardId],
-      zoneId: toZone,
-      order: newOrder,
-      state: { ...round.cards[topCard.cardId].state, visibleTo: 'SELF' },
+      case 'RECYCLE_RUNE':
+        commitMove(action.cardId, 'runes_deck', 'NOBODY')
+        break
+
+      case 'PLAY_CARD':
+      case 'MOVE_CARD':
+        commitMove(action.cardId, action.toZoneId)
+        break
+
+      case 'MOVE_TO_HAND':
+        commitMove(action.cardId, 'hand')
+        break
+
+      case 'DISCARD_CARD':
+        commitMove(action.cardId, 'discard')
+        break
+
+      case 'BANISH_CARD':
+        commitMove(action.cardId, 'banish')
+        break
+
+      case 'HIDE_CARD': {
+        const card = round.cards[action.cardId]
+        if (!card) return
+        round.cards[action.cardId] = { ...card, state: { ...card.state, visibleTo: 'NOBODY' } }
+        updateDoc(ref, {
+          [`cards.${action.cardId}.state.visibleTo`]: 'NOBODY',
+          _updatedBy: sessionId,
+          updatedAt: serverTimestamp(),
+        }).catch(console.error)
+        break
+      }
+
+      case 'REVEAL_CARD': {
+        const card = round.cards[action.cardId]
+        if (!card) return
+        round.cards[action.cardId] = { ...card, state: { ...card.state, visibleTo: 'ALL' } }
+        updateDoc(ref, {
+          [`cards.${action.cardId}.state.visibleTo`]: 'ALL',
+          _updatedBy: sessionId,
+          updatedAt: serverTimestamp(),
+        }).catch(console.error)
+        break
+      }
+
+      case 'TOGGLE_EXHAUSTED': {
+        const card = round.cards[action.cardId]
+        if (!card) return
+        const newValue = !card.state.exhausted
+        round.cards[action.cardId] = { ...card, state: { ...card.state, exhausted: newValue } }
+        updateDoc(ref, {
+          [`cards.${action.cardId}.state.exhausted`]: newValue,
+          _updatedBy: sessionId,
+          updatedAt: serverTimestamp(),
+        }).catch(console.error)
+        break
+      }
+
+      case 'SET_COUNTERS':
+      case 'SET_DAMAGES':
+      case 'SET_BUFF': {
+        const field = action.type === 'SET_COUNTERS' ? 'counters' : action.type === 'SET_DAMAGES' ? 'damages' : 'buffs'
+        const card = round.cards[action.cardId]
+        if (!card) return
+        round.cards[action.cardId] = { ...card, state: { ...card.state, [field]: action.value } }
+        updateDoc(ref, {
+          [`cards.${action.cardId}.state.${field}`]: action.value,
+          _updatedBy: sessionId,
+          updatedAt: serverTimestamp(),
+        }).catch(console.error)
+        break
+      }
     }
-
-    updateDoc(ref, {
-      [`cards.${topCard.cardId}.zoneId`]: toZone,
-      [`cards.${topCard.cardId}.order`]: newOrder,
-      [`cards.${topCard.cardId}.state.visibleTo`]: 'SELF',
-      _updatedBy: sessionId,
-      updatedAt: serverTimestamp(),
-    }).catch(console.error)
-  }
-
-  function toggleExhausted(cardId: string) {
-    const round = currentRound.value
-    if (!round?.cards[cardId]) return
-    const ref = roundRef()
-    if (!ref) return
-
-    const newValue = !round.cards[cardId].state.exhausted
-
-    // Optimistic update
-    round.cards[cardId] = {
-      ...round.cards[cardId],
-      state: { ...round.cards[cardId].state, exhausted: newValue },
-    }
-
-    updateDoc(ref, {
-      [`cards.${cardId}.state.exhausted`]: newValue,
-      _updatedBy: sessionId,
-      updatedAt: serverTimestamp(),
-    }).catch(console.error)
   }
 
   return {
@@ -348,8 +392,6 @@ export const useGameStore = defineStore('game', () => {
     confirmDiscard,
     submitMulligan,
     devSkipSetup,
-    moveCard,
-    drawTopCard,
-    toggleExhausted,
+    applyAction,
   }
 })

@@ -1,6 +1,6 @@
 import { ref, type ComputedRef, type InjectionKey, type Ref } from 'vue'
 import type { Rect } from '@/types/card.type'
-import type { CardState, ZoneId } from '@riftbound/shared'
+import type { CardState, GameAction, ZoneId } from '@riftbound/shared'
 
 const RUNE_ZONES = new Set<string>(['runes', 'runes_deck'])
 // battlefield (center card slot) is display-only — normal cards cannot be dragged there
@@ -53,7 +53,7 @@ export interface DragContext {
 export const DRAG_KEY = Symbol('drag') as InjectionKey<DragContext>
 
 export interface GameActionsContext {
-  toggleExhausted: (cardId: string) => void
+  applyAction: (action: GameAction) => void
 }
 
 export const GAME_ACTIONS_KEY = Symbol('game-actions') as InjectionKey<GameActionsContext>
@@ -61,7 +61,7 @@ export const GAME_ACTIONS_KEY = Symbol('game-actions') as InjectionKey<GameActio
 export function useDrag(
   zones: ComputedRef<Record<string, Rect>>,
   cards: ComputedRef<readonly CardState[]>,
-  moveCard: (cardId: string, toZoneId: ZoneId) => void,
+  applyAction: (action: GameAction) => void,
 ): DragContext {
   const dragging = ref<DragState | null>(null)
   const hoveredZone = ref<string | null>(null)
@@ -180,7 +180,13 @@ export function useDrag(
     if (dragging.value && hoveredZone.value && hoveredZoneValid.value) {
       const { zone } = parseZoneKey(hoveredZone.value)
       if (zone !== originZone) {
-        moveCard(dragging.value.cardId, zone as ZoneId)
+        applyAction({
+          type: 'MOVE_CARD',
+          playerId: dragging.value.ownerId,
+          cardId: dragging.value.cardId,
+          fromZoneId: originZone as ZoneId,
+          toZoneId: zone as ZoneId,
+        })
       }
     }
 

@@ -8,7 +8,7 @@ import { useLayout, SEPARATOR } from '@/composables/useLayout'
 import { useViewport } from '@/composables/useViewport'
 import { useDrag, DRAG_KEY, GAME_ACTIONS_KEY } from '@/composables/useDrag'
 import type { Rect } from '@/types/card.type'
-import type { CardState, ZoneId } from '@riftbound/shared'
+import type { CardState, GameAction, ZoneId } from '@riftbound/shared'
 
 const store = useGameStore()
 const { width: vw, height: vh } = useViewport()
@@ -23,9 +23,9 @@ const { zones, layouts, playersZone } = useLayout(allCards)
 
 // ── Drag ──────────────────────────────────────────────────────────────────────
 
-const drag = useDrag(zones, allCards, (cardId, toZoneId) => store.moveCard(cardId, toZoneId))
+const drag = useDrag(zones, allCards, store.applyAction)
 provide(DRAG_KEY, drag)
-provide(GAME_ACTIONS_KEY, { toggleExhausted: (id) => store.toggleExhausted(id) })
+provide(GAME_ACTIONS_KEY, { applyAction: store.applyAction })
 
 const isDragging = computed(() => drag.dragging.value !== null)
 
@@ -40,11 +40,11 @@ function zoneDragHint(key: string): string | null {
   return drag.hoveredZoneValid.value ? zoneLabel(key) : '✕ Zone interdite'
 }
 
-// ── Zone click (draw_card / play rune) ─────────────────────────────────────────
+// ── Zone click (draw / channel rune) ──────────────────────────────────────────
 
-const ZONE_CLICK: Record<string, { from: ZoneId; to: ZoneId }> = {
-  main_deck:  { from: 'main_deck',  to: 'hand'  },
-  runes_deck: { from: 'runes_deck', to: 'runes' },
+const ZONE_CLICK_ACTION: Record<string, (playerId: string, cardId: string, fromZoneId: ZoneId) => GameAction> = {
+  main_deck:  (playerId, cardId, fromZoneId) => ({ type: 'DRAW_CARD',    playerId, cardId, fromZoneId }),
+  runes_deck: (playerId, cardId) =>             ({ type: 'CHANNEL_CARD', playerId, cardId }),
 }
 
 function parseZoneKey(key: string): { owner: string | null; zone: string } {
@@ -59,15 +59,19 @@ function onZoneClick(key: string) {
   if (isDragging.value) return
   const { owner, zone } = parseZoneKey(key)
   if (!owner || owner !== store.myUid) return
-  const action = ZONE_CLICK[zone]
-  if (!action) return
-  store.drawTopCard(owner, action.from, action.to)
+  const makeAction = ZONE_CLICK_ACTION[zone]
+  if (!makeAction) return
+  const topCard = allCards.value
+    .filter(c => c.ownerId === owner && c.zoneId === zone)
+    .sort((a, b) => b.order - a.order)[0]
+  if (!topCard) return
+  store.applyAction(makeAction(owner, topCard.cardId, zone as ZoneId))
 }
 
 function isClickableZone(key: string): boolean {
   if (isDragging.value) return false
   const { owner, zone } = parseZoneKey(key)
-  return !!owner && owner === store.myUid && zone in ZONE_CLICK
+  return !!owner && owner === store.myUid && zone in ZONE_CLICK_ACTION
 }
 
 // ── Zone labels & counts ───────────────────────────────────────────────────────
