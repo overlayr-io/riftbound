@@ -3,7 +3,7 @@ import {ZoneId} from "./zone";
 
 export type CardId = string;
 export type CardType = 'rune' | 'unit' | 'spell' | 'gear' | 'battlefield' | 'legend'
-export type CardVisibleTo = 'ALL' | 'SELF' | 'OPPONENT'
+export type CardVisibleTo = 'ALL' | 'SELF' | 'NOBODY'
 
 /**
  * Deck-level card (static description), as produced by the deck-list import.
