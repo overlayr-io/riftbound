@@ -5,6 +5,7 @@ import type { CardLayout } from '@/types/card.type'
 import { DRAG_KEY, GAME_ACTIONS_KEY } from '@/composables/useDrag'
 import cardBack from '@/assets/img/card_back.png'
 import runeIcon from '@/assets/img/rune_icon.png'
+import CardContextMenu from '@/components/game/CardContextMenu.vue'
 
 const props = defineProps<{
   card: CardState
@@ -108,6 +109,23 @@ function onClick() {
   if (!NON_DRAGGABLE_ZONES.has(props.card.zoneId)) return
   toggleExhausted()
 }
+
+// ── Context menu ──────────────────────────────────────────────────────────────
+
+const RUNE_ZONES = new Set(['runes', 'runes_deck'])
+
+const ctxVisible = ref(false)
+const ctxX = ref(0)
+const ctxY = ref(0)
+
+function onContextMenu(e: MouseEvent) {
+  if (!isOwned.value) return
+  if (RUNE_ZONES.has(props.card.zoneId)) return
+  e.preventDefault()
+  ctxX.value = e.clientX
+  ctxY.value = e.clientY
+  ctxVisible.value = true
+}
 </script>
 
 <template>
@@ -117,6 +135,7 @@ function onClick() {
     :style="style"
     @pointerdown="onPointerDown"
     @click="onClick"
+    @contextmenu="onContextMenu"
     @mouseenter="isHovered = true"
     @mouseleave="isHovered = false"
   >
@@ -147,6 +166,15 @@ function onClick() {
       <span v-if="card.state.buffs" class="badge badge-buff">{{ card.state.buffs }}</span>
     </div>
   </div>
+
+  <CardContextMenu
+    :visible="ctxVisible"
+    :card="card"
+    :x="ctxX"
+    :y="ctxY"
+    :current-player-id="currentPlayerId"
+    @close="ctxVisible = false"
+  />
 </template>
 
 <style scoped>

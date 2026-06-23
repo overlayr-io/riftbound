@@ -75,6 +75,12 @@ export type RevealCardAction = {
   cardId: string
 }
 
+export type RevealCardForSelfAction = {
+  type: 'REVEAL_CARD_FOR_SELF'
+  playerId: PlayerId
+  cardId: string
+}
+
 // ── State actions ─────────────────────────────────────────────────────────────
 
 export type ToggleExhaustedAction = {
@@ -117,6 +123,7 @@ export type GameAction =
   | BanishCardAction
   | HideCardAction
   | RevealCardAction
+  | RevealCardForSelfAction
   | ToggleExhaustedAction
   | SetCountersAction
   | SetDamagesAction

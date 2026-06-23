@@ -239,6 +239,33 @@ export const useGameStore = defineStore('game', () => {
     return 'ALL'
   }
 
+  function sendToDeck(cardId: string, deckZone: ZoneId, position: 'top' | 'bottom') {
+    const round = currentRound.value
+    if (!round?.cards[cardId]) return
+    const ref = roundRef()
+    if (!ref) return
+
+    const deckCards = Object.values(round.cards).filter(c => c.zoneId === deckZone)
+    const newOrder = position === 'top'
+      ? Math.max(-1, ...deckCards.map(c => c.order)) + 1
+      : Math.min(0, ...deckCards.map(c => c.order)) - 1
+
+    round.cards[cardId] = {
+      ...round.cards[cardId],
+      zoneId: deckZone,
+      order: newOrder,
+      state: { ...round.cards[cardId].state, visibleTo: 'NOBODY', exhausted: round.cards[cardId].state.exhausted },
+    }
+
+    updateDoc(ref, {
+      [`cards.${cardId}.zoneId`]: deckZone,
+      [`cards.${cardId}.order`]: newOrder,
+      [`cards.${cardId}.state.visibleTo`]: 'NOBODY',
+      _updatedBy: sessionId,
+      updatedAt: serverTimestamp(),
+    }).catch(console.error)
+  }
+
   // Core primitive — all game actions funnel through this
   function commitMove(cardId: string, toZoneId: ZoneId, overrideVisibility?: CardVisibleTo) {
     const round = currentRound.value
@@ -331,6 +358,18 @@ export const useGameStore = defineStore('game', () => {
         break
       }
 
+      case 'REVEAL_CARD_FOR_SELF': {
+        const card = round.cards[action.cardId]
+        if (!card) return
+        round.cards[action.cardId] = { ...card, state: { ...card.state, visibleTo: 'SELF' } }
+        updateDoc(ref, {
+          [`cards.${action.cardId}.state.visibleTo`]: 'SELF',
+          _updatedBy: sessionId,
+          updatedAt: serverTimestamp(),
+        }).catch(console.error)
+        break
+      }
+
       case 'TOGGLE_EXHAUSTED': {
         const card = round.cards[action.cardId]
         if (!card) return
@@ -384,6 +423,7 @@ export const useGameStore = defineStore('game', () => {
     bfDisplayOrder,
     attachGame,
     detach,
+    sendToDeck,
     importDeck,
     selectBattlefield,
     rollDice,

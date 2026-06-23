@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import type { CardState, CardVisibleTo } from '@riftbound/shared'
 import { useGameStore } from '@/stores/game'
 
@@ -18,10 +18,42 @@ const emit = defineEmits<{
 const gameStore = useGameStore()
 
 const activeSubmenu = ref<string | null>(null)
+let closeTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleClose() {
+  closeTimer = setTimeout(() => { activeSubmenu.value = null }, 150)
+}
+
+function cancelClose() {
+  if (closeTimer) { clearTimeout(closeTimer); closeTimer = null }
+}
+const menuRef = ref<HTMLElement | null>(null)
+const adjustedX = ref(props.x)
+const adjustedY = ref(props.y)
+
+watch(
+  () => [props.visible, props.x, props.y] as const,
+  async ([visible, x, y]) => {
+    if (!visible) return
+    adjustedX.value = x
+    adjustedY.value = y
+    await nextTick()
+    const el = menuRef.value
+    if (!el) return
+    const { width, height } = el.getBoundingClientRect()
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+    if (x + width > vw) adjustedX.value = vw - width - 8
+    if (y + height > vh) adjustedY.value = vh - height - 8
+    if (adjustedX.value < 8) adjustedX.value = 8
+    if (adjustedY.value < 8) adjustedY.value = 8
+  },
+  { immediate: true },
+)
 
 const menuStyle = computed(() => ({
-  left: props.x + 'px',
-  top: props.y + 'px',
+  left: adjustedX.value + 'px',
+  top: adjustedY.value + 'px',
 }))
 
 const canSeeFront = computed(() => {
@@ -40,15 +72,7 @@ function onOverlay(e: MouseEvent) {
 
 function sendToDeck(position: 'top' | 'bottom') {
   if (!props.card) return
-  // top = order -1 (before all), bottom = max order handled by commitMove
-  const round = gameStore.currentRound
-  if (!round) return
-  if (position === 'top') {
-    const minOrder = Math.min(0, ...Object.values(round.cards).filter(c => c.zoneId === 'main_deck').map(c => c.order))
-    gameStore.applyAction({ type: 'MOVE_CARD', playerId: props.currentPlayerId, cardId: props.card.cardId, fromZoneId: props.card.zoneId, toZoneId: 'main_deck' })
-  } else {
-    gameStore.applyAction({ type: 'MOVE_CARD', playerId: props.currentPlayerId, cardId: props.card.cardId, fromZoneId: props.card.zoneId, toZoneId: 'main_deck' })
-  }
+  gameStore.sendToDeck(props.card.cardId, 'main_deck', position)
   emit('close')
 }
 
@@ -63,9 +87,7 @@ function setVisibleTo(value: CardVisibleTo) {
   } else if (value === 'ALL') {
     gameStore.applyAction({ type: 'REVEAL_CARD', playerId: props.currentPlayerId, cardId: props.card.cardId })
   } else {
-    // SELF — no dedicated action yet; piggyback on HIDE then adjust via direct update
-    // For now treat SELF as REVEAL since there's no SET_VISIBLE_TO action
-    gameStore.applyAction({ type: 'REVEAL_CARD', playerId: props.currentPlayerId, cardId: props.card.cardId })
+    gameStore.applyAction({ type: 'REVEAL_CARD_FOR_SELF', playerId: props.currentPlayerId, cardId: props.card.cardId })
   }
 }
 
@@ -97,7 +119,7 @@ function adjustCounter(field: 'counters' | 'damages' | 'buffs', delta: number) {
 <template>
   <Teleport to="body">
     <div v-if="visible && card" class="ctx-overlay" @mousedown="onOverlay">
-      <div class="ctx-menu" :style="menuStyle" @mouseleave="activeSubmenu = null">
+      <div ref="menuRef" class="ctx-menu" :style="menuStyle" @mouseleave="scheduleClose" @mouseenter="cancelClose">
 
         <!-- Card name header -->
         <div class="ctx-header">
@@ -108,7 +130,7 @@ function adjustCounter(field: 'counters' | 'damages' | 'buffs', delta: number) {
         <!-- Vers le deck -->
         <div
           class="ctx-item ctx-item--arrow"
-          @mouseenter="activeSubmenu = 'deck'"
+          @mouseenter="cancelClose(); activeSubmenu = 'deck'"
           @click="activeSubmenu = activeSubmenu === 'deck' ? null : 'deck'"
         >
           <span class="ctx-icon">
@@ -117,7 +139,7 @@ function adjustCounter(field: 'counters' | 'damages' | 'buffs', delta: number) {
           <span class="ctx-label">Vers le deck</span>
           <svg class="ctx-arrow-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
 
-          <div v-if="activeSubmenu === 'deck'" class="ctx-submenu">
+          <div v-if="activeSubmenu === 'deck'" class="ctx-submenu" @mouseenter="cancelClose" @mouseleave="scheduleClose">
             <div class="ctx-submenu-title">VERS LE DECK</div>
             <div class="ctx-item" @click.stop="sendToDeck('top')">
               <span class="ctx-icon">
@@ -137,7 +159,7 @@ function adjustCounter(field: 'counters' | 'damages' | 'buffs', delta: number) {
         <div class="ctx-sep" />
 
         <!-- Split: face toggle | Visible par -->
-        <div class="ctx-split-row" @mouseleave="activeSubmenu = activeSubmenu === 'visibleTo' ? 'visibleTo' : null">
+        <div class="ctx-split-row">
           <div class="ctx-split-left" @click="toggleFace">
             <span class="ctx-icon">
               <svg v-if="canSeeFront" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
@@ -147,13 +169,13 @@ function adjustCounter(field: 'counters' | 'damages' | 'buffs', delta: number) {
           </div>
           <div
             class="ctx-split-right"
-            @mouseenter="activeSubmenu = 'visibleTo'"
+            @mouseenter="cancelClose(); activeSubmenu = 'visibleTo'"
             @click.stop="activeSubmenu = activeSubmenu === 'visibleTo' ? null : 'visibleTo'"
           >
             <span class="ctx-split-right-label">Visible par</span>
             <svg class="ctx-arrow-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
 
-            <div v-if="activeSubmenu === 'visibleTo'" class="ctx-submenu ctx-submenu--right">
+            <div v-if="activeSubmenu === 'visibleTo'" class="ctx-submenu ctx-submenu--right" @mouseenter="cancelClose" @mouseleave="scheduleClose">
               <div class="ctx-item ctx-item--check" @click.stop="setVisibleTo('ALL')">
                 <span class="ctx-radio" :class="{ 'ctx-radio--on': visibleTo === 'ALL' }">
                   <span v-if="visibleTo === 'ALL'" class="ctx-radio-dot" />
@@ -231,75 +253,72 @@ function adjustCounter(field: 'counters' | 'damages' | 'buffs', delta: number) {
 
 .ctx-menu {
   position: absolute;
-  width: 258px;
-  background: #0e1624;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 10px;
-  padding: 6px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255,255,255,0.04);
+  width: 210px;
+  padding: 6px 0;
+  background: linear-gradient(160deg, #0d1c2e 0%, #060d1a 100%);
+  border: 1px solid rgba(200, 170, 110, 0.28);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(0, 0, 0, 0.4);
   user-select: none;
   font-family: inherit;
 }
 
 .ctx-header {
-  padding: 10px 12px 8px;
-  font-size: 12px;
+  padding: 5px 12px 7px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #c8a94a;
+  color: #C8AA6E;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ctx-header-sep {
   height: 1px;
-  background: rgba(200, 169, 74, 0.2);
-  margin: 0 0 4px;
+  background: rgba(200, 170, 110, 0.15);
+  margin: 0 0 3px;
 }
 
 .ctx-sep {
   height: 1px;
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(200, 170, 110, 0.12);
   margin: 4px 0;
 }
 
 .ctx-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 12px;
-  border-radius: 6px;
+  gap: 8px;
+  padding: 6px 12px;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.80);
-  font-size: 13.5px;
+  color: #c8d8e0;
+  font-size: 11px;
   position: relative;
-  transition: background 0.1s;
+  transition: background 0.1s, color 0.1s;
 }
 
 .ctx-item:hover,
 .ctx-item--arrow:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.95);
+  background: rgba(200, 170, 110, 0.08);
+  color: #F2E5CD;
 }
 
 .ctx-item--stepper {
   cursor: default;
 }
 .ctx-item--stepper:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: transparent;
 }
 
 .ctx-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
+  width: 13px;
+  height: 13px;
   flex-shrink: 0;
-  color: rgba(255, 255, 255, 0.38);
-}
-
-.ctx-item:hover .ctx-icon,
-.ctx-item--arrow:hover .ctx-icon {
-  color: rgba(255, 255, 255, 0.60);
+  opacity: 0.7;
 }
 
 .ctx-label {
@@ -307,14 +326,13 @@ function adjustCounter(field: 'counters' | 'damages' | 'buffs', delta: number) {
 }
 
 .ctx-arrow-icon {
-  color: rgba(255, 255, 255, 0.30);
+  color: rgba(200, 170, 110, 0.45);
   flex-shrink: 0;
 }
 
 /* Split button */
 .ctx-split-row {
   display: flex;
-  border-radius: 6px;
   overflow: visible;
   position: relative;
 }
@@ -322,47 +340,46 @@ function adjustCounter(field: 'counters' | 'damages' | 'buffs', delta: number) {
 .ctx-split-left {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 12px;
+  gap: 8px;
+  padding: 6px 12px;
   flex: 1;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.80);
-  font-size: 13.5px;
-  border-radius: 6px 0 0 6px;
-  transition: background 0.1s;
+  color: #c8d8e0;
+  font-size: 11px;
+  transition: background 0.1s, color 0.1s;
 }
 
 .ctx-split-left:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.95);
+  background: rgba(200, 170, 110, 0.08);
+  color: #F2E5CD;
 }
 
 .ctx-split-left .ctx-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
+  width: 13px;
+  height: 13px;
   flex-shrink: 0;
-  color: rgba(255, 255, 255, 0.38);
+  opacity: 0.7;
 }
 
 .ctx-split-right {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 9px 10px;
+  padding: 6px 10px;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.42);
-  font-size: 12px;
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 0 6px 6px 0;
+  color: #6a8a90;
+  font-size: 10px;
+  border-left: 1px solid rgba(200, 170, 110, 0.14);
   transition: background 0.1s, color 0.1s;
   position: relative;
 }
 
 .ctx-split-right:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.80);
+  background: rgba(200, 170, 110, 0.08);
+  color: #c8d8e0;
 }
 
 .ctx-split-right-label {
@@ -373,116 +390,117 @@ function adjustCounter(field: 'counters' | 'damages' | 'buffs', delta: number) {
 .ctx-stepper {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   margin-left: auto;
 }
 
 .ctx-btn {
-  width: 26px;
-  height: 26px;
-  border-radius: 5px;
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
   border: 1px solid;
-  font-size: 16px;
+  font-size: 14px;
+  font-weight: 700;
   line-height: 1;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: background 0.1s;
-  font-weight: 500;
 }
 
 .ctx-btn--neutral {
-  border-color: rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.65);
+  border-color: rgba(200, 170, 110, 0.25);
+  background: rgba(200, 170, 110, 0.10);
+  color: #C8AA6E;
 }
 .ctx-btn--neutral:hover {
-  background: rgba(255, 255, 255, 0.13);
-  color: rgba(255, 255, 255, 0.9);
+  background: rgba(200, 170, 110, 0.22);
 }
 
 .ctx-btn--dmg {
-  border-color: rgba(210, 60, 60, 0.45);
-  background: rgba(210, 60, 60, 0.10);
-  color: rgba(255, 110, 110, 0.9);
+  border-color: rgba(200, 60, 60, 0.25);
+  background: rgba(200, 60, 60, 0.10);
+  color: #e06060;
 }
 .ctx-btn--dmg:hover {
-  background: rgba(210, 60, 60, 0.20);
+  background: rgba(200, 60, 60, 0.22);
 }
 
 .ctx-btn--plus.ctx-btn--neutral {
-  border-color: rgba(80, 200, 120, 0.35);
-  background: rgba(80, 200, 120, 0.08);
-  color: rgba(100, 220, 140, 0.9);
+  border-color: rgba(200, 170, 110, 0.25);
+  background: rgba(200, 170, 110, 0.10);
+  color: #C8AA6E;
 }
 .ctx-btn--plus.ctx-btn--neutral:hover {
-  background: rgba(80, 200, 120, 0.17);
+  background: rgba(200, 170, 110, 0.22);
 }
 
 .ctx-btn--plus.ctx-btn--dmg {
-  border-color: rgba(210, 60, 60, 0.45);
-  background: rgba(210, 60, 60, 0.10);
-  color: rgba(255, 110, 110, 0.9);
+  border-color: rgba(200, 60, 60, 0.25);
+  background: rgba(200, 60, 60, 0.10);
+  color: #e06060;
 }
 
 .ctx-val {
-  width: 22px;
+  min-width: 20px;
   text-align: center;
   font-size: 13px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.88);
+  font-weight: 700;
+  color: #F2E5CD;
+  line-height: 1;
 }
 
 /* Submenus */
 .ctx-submenu {
   position: absolute;
-  left: calc(100% + 6px);
-  top: -6px;
-  min-width: 210px;
-  background: #0e1624;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 10px;
-  padding: 6px;
-  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.7);
+  left: calc(100% + 4px);
+  top: -4px;
+  min-width: 180px;
+  padding: 4px 0;
+  background: linear-gradient(160deg, #0e2030 0%, #060d1a 100%);
+  border: 1px solid rgba(200, 170, 110, 0.32);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(0, 0, 0, 0.4);
   z-index: 10;
 }
 
 .ctx-submenu-title {
-  padding: 8px 12px 6px;
-  font-size: 10.5px;
+  padding: 5px 12px 6px;
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.1em;
-  color: #c8a94a;
+  color: #C8AA6E;
   text-transform: uppercase;
+  border-bottom: 1px solid rgba(200, 170, 110, 0.12);
+  margin-bottom: 2px;
 }
 
 /* Radio items */
 .ctx-item--check {
-  gap: 12px;
+  gap: 10px;
 }
 
 .ctx-radio {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  border: 1.5px solid rgba(200, 170, 110, 0.3);
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color 0.15s;
   background: transparent;
 }
 
 .ctx-radio--on {
-  border-color: #c8a94a;
+  border-color: #C8AA6E;
 }
 
 .ctx-radio-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: #c8a94a;
+  background: #C8AA6E;
 }
 </style>
