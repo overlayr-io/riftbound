@@ -1,14 +1,14 @@
 <script lang="ts" setup>
-
-import GameSidebarDual from "@/components/game/GameSidebarDual.vue";
-import CardView from "@/components/game/CardView.vue";
-import {useGameStore} from "@/stores/game.ts";
-import {useLayout, SEPARATOR} from "@/composables/useLayout.ts";
-import {useViewport} from "@/composables/useViewport.ts";
-import ZoneView from "@/components/game/ZoneView.vue";
-import type {Rect} from "@/types/card.type.ts";
-import {computed} from "vue";
-import type {CardState} from "@riftbound/shared";
+import { computed, provide } from 'vue'
+import GameSidebarDual from '@/components/game/GameSidebarDual.vue'
+import CardView from '@/components/game/CardView.vue'
+import ZoneView from '@/components/game/ZoneView.vue'
+import { useGameStore } from '@/stores/game'
+import { useLayout, SEPARATOR } from '@/composables/useLayout'
+import { useViewport } from '@/composables/useViewport'
+import { useDrag, DRAG_KEY, GAME_ACTIONS_KEY } from '@/composables/useDrag'
+import type { Rect } from '@/types/card.type'
+import type { CardState, ZoneId } from '@riftbound/shared'
 
 const store = useGameStore()
 const { width: vw, height: vh } = useViewport()
@@ -20,6 +20,90 @@ const allCards = computed<readonly CardState[]>(() =>
 )
 
 const { zones, layouts, playersZone } = useLayout(allCards)
+
+// ── Drag ──────────────────────────────────────────────────────────────────────
+
+const drag = useDrag(zones, allCards, (cardId, toZoneId) => store.moveCard(cardId, toZoneId))
+provide(DRAG_KEY, drag)
+provide(GAME_ACTIONS_KEY, { toggleExhausted: (id) => store.toggleExhausted(id) })
+
+const isDragging = computed(() => drag.dragging.value !== null)
+
+function zoneDragState(key: string): 'valid' | 'invalid' | 'dim' | null {
+  if (!isDragging.value) return null
+  if (drag.hoveredZone.value === key) return drag.hoveredZoneValid.value ? 'valid' : 'invalid'
+  return 'dim'
+}
+
+function zoneDragHint(key: string): string | null {
+  if (drag.hoveredZone.value !== key) return null
+  return drag.hoveredZoneValid.value ? zoneLabel(key) : '✕ Zone interdite'
+}
+
+// ── Zone click (draw_card / play rune) ─────────────────────────────────────────
+
+const ZONE_CLICK: Record<string, { from: ZoneId; to: ZoneId }> = {
+  main_deck:  { from: 'main_deck',  to: 'hand'  },
+  runes_deck: { from: 'runes_deck', to: 'runes' },
+}
+
+function parseZoneKey(key: string): { owner: string | null; zone: string } {
+  const ci = key.indexOf(':')
+  if (ci !== -1) return { owner: key.slice(0, ci), zone: key.slice(ci + 1) }
+  const ui = key.indexOf('_')
+  if (ui !== -1) return { owner: key.slice(0, ui), zone: key.slice(ui + 1) }
+  return { owner: null, zone: key }
+}
+
+function onZoneClick(key: string) {
+  if (isDragging.value) return
+  const { owner, zone } = parseZoneKey(key)
+  if (!owner || owner !== store.myUid) return
+  const action = ZONE_CLICK[zone]
+  if (!action) return
+  store.drawTopCard(owner, action.from, action.to)
+}
+
+function isClickableZone(key: string): boolean {
+  if (isDragging.value) return false
+  const { owner, zone } = parseZoneKey(key)
+  return !!owner && owner === store.myUid && zone in ZONE_CLICK
+}
+
+// ── Zone labels & counts ───────────────────────────────────────────────────────
+
+const ZONE_DISPLAY: Record<string, string> = {
+  hand: 'Main', main_deck: 'Deck', discard: 'Défausse', banish: 'Exil',
+  runes_deck: 'Runes', legend: 'Légende', champion: 'Champion',
+  base: 'Base', runes: 'Runes', battlefield: 'Champ de bataille', stack: 'Stack',
+}
+
+const LABELED_ZONES = new Set(['runes_deck', 'legend', 'champion', 'main_deck', 'discard', 'banish', 'battlefield_owner', 'battlefield_opponent'])
+
+function zoneLabel(key: string): string {
+  const { zone } = parseZoneKey(key)
+  if (zone === 'battlefield_owner') return 'Mon battlefield'
+  if (zone === 'battlefield_opponent') {
+    const oppId = store.opponents[0]
+    const oppName = oppId ? (store.playerNames[oppId]?.name ?? oppId.slice(0, 6)) : '?'
+    return `Battlefield de ${oppName}`
+  }
+  return ZONE_DISPLAY[zone] ?? zone
+}
+
+function labelSide(key: string): 'top' | 'bottom' {
+  const { owner } = parseZoneKey(key)
+  return owner === store.myUid ? 'top' : 'bottom'
+}
+
+const zoneCounts = computed(() => {
+  const out: Record<string, number> = {}
+  for (const card of allCards.value) {
+    const key = `${card.ownerId}_${card.zoneId}`
+    out[key] = (out[key] ?? 0) + 1
+  }
+  return out
+})
 
 // ── Player colors ─────────────────────────────────────────────────────────────
 
@@ -59,7 +143,6 @@ function bleedRect(rect: Rect): Rect {
   if (y + h > vh.value - 10)   { h += BLEED }
   return { x, y, w, h }
 }
-
 </script>
 
 <template>
@@ -68,59 +151,89 @@ function bleedRect(rect: Rect): Rect {
 
     <div class="flex-1">
 
-      <!-- Players zone -->
+      <!-- Player territories -->
       <div class="players-layer">
         <template v-for="(rect, key) in playersZone" :key="key">
-
-          <!-- Territory -->
           <div
-              class="player-zone"
-              :style="{
-                left:   bleedRect(rect).x + 'px',
-                top:    bleedRect(rect).y + 'px',
-                width:  bleedRect(rect).w + 'px',
-                height: bleedRect(rect).h + 'px',
-                '--player-color': colorOfPlayerId(playerIdFromKey(String(key)) ?? ''),
-              }"
+            class="player-zone"
+            :style="{
+              left:   bleedRect(rect).x + 'px',
+              top:    bleedRect(rect).y + 'px',
+              width:  bleedRect(rect).w + 'px',
+              height: bleedRect(rect).h + 'px',
+              '--player-color': colorOfPlayerId(playerIdFromKey(String(key)) ?? ''),
+            }"
           />
-
-          <!-- Battlefield -->
           <div
-              v-if="zones[bfKey(String(key))]"
-              class="player-battlefield"
-              :style="{
-                left:   zones[bfKey(String(key))].x + 'px',
-                top:    zones[bfKey(String(key))].y + 'px',
-                width:  zones[bfKey(String(key))].w + 'px',
-                height: zones[bfKey(String(key))].h + 'px',
-                '--player-color': colorOfPlayerId(playerIdFromKey(String(key)) ?? ''),
-              }"
+            v-if="zones[bfKey(String(key))]"
+            class="player-battlefield"
+            :style="{
+              left:   zones[bfKey(String(key))].x + 'px',
+              top:    zones[bfKey(String(key))].y + 'px',
+              width:  zones[bfKey(String(key))].w + 'px',
+              height: zones[bfKey(String(key))].h + 'px',
+              '--player-color': colorOfPlayerId(playerIdFromKey(String(key)) ?? ''),
+            }"
           />
         </template>
       </div>
 
-      <!-- Zones -->
+      <!-- Zones layer (z:2) -->
       <div class="zones-layer">
         <ZoneView
-            v-for="(rect, key) in zones"
-            :key="key"
-            :id="String(key)"
-            :rect="rect"
-            :color="colorOfZoneKey(String(key))"
+          v-for="(rect, key) in zones"
+          :key="key"
+          :rect="rect"
+          :color="colorOfZoneKey(String(key))"
+          :drag-state="zoneDragState(String(key))"
+          :hint="zoneDragHint(String(key))"
+          :clickable="isClickableZone(String(key))"
+          @click="onZoneClick(String(key))"
         />
       </div>
 
-      <!-- Cards -->
+      <!-- Zone overlays: labels + counts + click targets (z:4) -->
+      <div class="overlays-layer" style="z-index:4; pointer-events:none">
+        <template v-for="(rect, key) in zones" :key="'ov-' + key">
+
+          <!-- Zone label + count badge -->
+          <div
+            v-if="LABELED_ZONES.has(parseZoneKey(String(key)).zone) && rect.w > 0"
+            class="zone-overlay"
+            :style="{ left: rect.x + 'px', top: rect.y + 'px', width: rect.w + 'px', height: rect.h + 'px' }"
+          >
+            <span class="zone-name" :class="labelSide(String(key)) === 'top' ? 'zone-name--top' : 'zone-name--bottom'">
+              {{ zoneLabel(String(key)) }}
+            </span>
+            <div class="zone-count" :class="labelSide(String(key)) === 'top' ? 'zone-count--top-right' : 'zone-count--bottom-left'">
+              {{ zoneCounts[String(key)] ?? 0 }}
+            </div>
+          </div>
+
+          <!-- Click overlay for drawable zones (above cards) -->
+          <div
+            v-if="isClickableZone(String(key)) && rect.w > 0"
+            class="zone-overlay zone-click-overlay"
+            style="pointer-events: auto"
+            :style="{ left: rect.x + 'px', top: rect.y + 'px', width: rect.w + 'px', height: rect.h + 'px' }"
+            @click="onZoneClick(String(key))"
+          />
+
+        </template>
+      </div>
+
+      <!-- Cards layer (z:3) -->
       <div class="cards-layer">
         <template v-for="card in allCards" :key="card.cardId">
           <CardView
-              v-if="layouts.get(card.cardId)"
-              :card="card"
-              :layout="layouts.get(card.cardId)!"
-              :current-player-id="store.myUid ?? ''"
+            v-if="layouts.get(card.cardId)"
+            :card="card"
+            :layout="layouts.get(card.cardId)!"
+            :current-player-id="store.myUid ?? ''"
           />
         </template>
       </div>
+
     </div>
   </div>
 </template>
@@ -153,9 +266,65 @@ function bleedRect(rect: Rect): Rect {
   z-index: 2;
   inset: 0;
 }
+
 .cards-layer {
   position: fixed;
   z-index: 3;
   inset: 0;
 }
+
+.overlays-layer {
+  position: fixed;
+  inset: 0;
+}
+
+.zone-overlay {
+  position: fixed;
+}
+
+.zone-click-overlay {
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.zone-click-overlay:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Zone labels */
+.zone-name {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.zone-name--top    { top: 5px; }
+.zone-name--bottom { bottom: 5px; }
+
+/* Card count badge */
+.zone-count {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.8);
+  pointer-events: none;
+}
+
+.zone-count--top-right   { top: 4px;    right: 4px; }
+.zone-count--bottom-left { bottom: 4px; left: 4px; }
 </style>

@@ -6,7 +6,6 @@ import {CardLayout, Rect} from "@/types/card.type.ts";
 import {useGameStore} from "@/stores/game.ts";
 
 const SEPARATOR = ':'
-const ROW_GAP = 4
 
 export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
   const store = useGameStore()
@@ -15,32 +14,37 @@ export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
 
   // ── Layout functions ──────────────────────────────────────────────────────────
 
-  // Fan/arc: spread cards in a hand. flip=true for opponent (rotated 180°, arc inverted).
+  // Circular arc hand fan. R=800 gives a gentle curve; maxAngle = min(12°, n×4°).
+  // flip=true for opponent: arc curves upward and cards appear upside-down (cssRotation 180°).
   function layoutHand(zone: Rect, cards: CardState[], out: Map<string, CardLayout>, flip: boolean) {
     const cw = cardW.value
     const ch = cardH.value
     const n = cards.length
     if (n === 0) return
 
-    const MAX_ROT = Math.min(20, n * 2.5)
-    const overlap = cw * 0.55
-    const naturalSpan = cw + Math.max(0, n - 1) * overlap
-    const span = Math.min(naturalSpan, zone.w * 0.95)
-    const step = n === 1 ? 0 : (span - cw) / (n - 1)
-    const startX = zone.x + (zone.w - span) / 2
+    const R = 800
+    const maxAngleDeg = Math.min(12, n * 4)
 
-    for (let i = 0; i < n; i++) {
-      const t = n === 1 ? 0 : (i / (n - 1) - 0.5) * 2  // -1 to 1
-      const rotation = (flip ? 180 : 0) + t * MAX_ROT
-      const arc = -(1 - t * t) * ch * 0.05
-      out.set(cards[i].cardId, {
-        x: startX + i * step,
-        y: zone.y + (zone.h - ch) / 2 + (flip ? -arc : arc),
+    const arcCx = zone.x + zone.w / 2
+    const arcCy = flip
+      ? zone.y + zone.h / 2 - R   // arc center above zone → cards curve upward
+      : zone.y + zone.h / 2 + R   // arc center below zone → cards curve downward
+
+    cards.forEach((card, i) => {
+      const t = n === 1 ? 0 : (i / (n - 1)) * 2 - 1   // -1 … +1
+      const angleDeg = t * maxAngleDeg
+      const angleRad = angleDeg * (Math.PI / 180)
+      const dy = flip ? R * Math.cos(angleRad) : -R * Math.cos(angleRad)
+
+      out.set(card.cardId, {
+        x: arcCx + R * Math.sin(angleRad) - cw / 2,
+        y: arcCy + dy - ch / 2,
         w: cw, h: ch,
-        rotation,
+        rotation: 0,
+        cssRotation: flip ? 180 + -angleDeg : angleDeg,
         z: i,
       })
-    }
+    })
   }
 
   // Stack with top card centered and up to 2 ghost cards peeking behind.
@@ -84,42 +88,56 @@ export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
     })
   }
 
-  // Horizontal row, centered. Exhausted cards are rotated 90° and occupy ch as width.
-  function layoutRow(zone: Rect, cards: CardState[], out: Map<string, CardLayout>, reverseZ = false) {
+  // Horizontal row, centered. Cards keep their natural size on overflow: gap is reduced
+  // (step-based compression) so cards overlap rather than shrink.
+  function layoutRow(zone: Rect, cards: CardState[], out: Map<string, CardLayout>, invertZ = false) {
     const cw = cardW.value
     const ch = cardH.value
+    const GAP = 6
     const n = cards.length
     if (n === 0) return
 
-    // Visual width per card (exhausted cards take ch as horizontal footprint)
-    const vws = cards.map(c => c.state.exhausted ? ch : cw)
-    const totalNatural = vws.reduce((s, w) => s + w, 0)
-    const totalWithGaps = totalNatural + (n - 1) * ROW_GAP
-    const compress = totalWithGaps > zone.w
-      ? (zone.w - (n - 1) * ROW_GAP) / totalNatural
-      : 1
+    // Exhausted card lies on its side → takes ch as horizontal footprint
+    const footprintW = cards.map(c => c.state.exhausted ? ch : cw)
 
-    const scaledCw = cw * compress
-    const scaledCh = ch * compress
-    const scaledTotal = vws.reduce((s, w) => s + w * compress, 0) + (n - 1) * ROW_GAP
+    const naturalXs: number[] = [0]
+    for (let i = 1; i < n; i++) naturalXs.push(naturalXs[i - 1] + footprintW[i - 1] + GAP)
+    const naturalTotal = naturalXs[n - 1] + footprintW[n - 1]
 
-    let x = zone.x + (zone.w - scaledTotal) / 2
-
-    for (let i = 0; i < n; i++) {
-      const card = cards[i]
-      const vw = vws[i] * compress
-      out.set(card.cardId, {
-        x: x + vw / 2 - scaledCw / 2,
-        y: zone.y + (zone.h - scaledCh) / 2,
-        w: scaledCw, h: scaledCh,
-        rotation: card.state.exhausted ? 90 : 0,
-        z: reverseZ ? n - 1 - i : i,
-      })
-      x += vw + ROW_GAP
+    let xs: number[]
+    if (naturalTotal <= zone.w) {
+      const offset = zone.x + (zone.w - naturalTotal) / 2
+      xs = naturalXs.map(x => x + offset)
+    } else if (n === 1) {
+      xs = [zone.x + (zone.w - footprintW[0]) / 2]
+    } else {
+      const lastX = zone.x + zone.w - footprintW[n - 1]
+      const step = Math.max(1, (lastX - zone.x) / (n - 1))
+      xs = Array.from({ length: n }, (_, i) => zone.x + i * step)
     }
+
+    cards.forEach((card, i) => {
+      const z = invertZ ? (n - 1 - i) : i
+      if (card.state.exhausted) {
+        out.set(card.cardId, {
+          x: xs[i] + (ch - cw) / 2,   // center the rotated card in its footprint
+          y: zone.y + (zone.h - ch) / 2,
+          w: cw, h: ch,
+          rotation: 90,
+          z,
+        })
+      } else {
+        out.set(card.cardId, {
+          x: xs[i],
+          y: zone.y + (zone.h - ch) / 2,
+          w: cw, h: ch,
+          rotation: 0,
+          z,
+        })
+      }
+    })
   }
 
-  // Same as layoutRow but z-index reversed (rightmost card goes behind).
   function layoutReverseRow(zone: Rect, cards: CardState[], out: Map<string, CardLayout>) {
     layoutRow(zone, cards, out, true)
   }
@@ -129,23 +147,25 @@ export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
     layoutRow(zone, cards, out)
   }
 
-  // Overlapping fan: all cards at same center, older cards rotated −10° each. Max 6 visible.
+  // Overlapping fan: all cards at same center, older cards rotated −10° each (cssRotation).
+  // Max 6 visible. Cards are sized to fill the zone while keeping aspect ratio.
   function layoutStack(zone: Rect, cards: CardState[], out: Map<string, CardLayout>) {
     const n = cards.length
     if (n === 0) return
 
-    const MAX_VISIBLE = 6
-    const ROT_PER_LEVEL = -10
+    const PAD = 6
+    const maxH = zone.h - PAD * 2
+    const maxW = zone.w - PAD * 2
+    let ch = maxH
+    let cw = Math.round(ch * (cardW.value / cardH.value))
+    if (cw > maxW) { cw = maxW; ch = Math.round(cw * (cardH.value / cardW.value)) }
 
-    const scaleW = zone.w / cardW.value
-    const scaleH = zone.h / cardH.value
-    const scale = Math.min(scaleW, scaleH, 1)
-    const cw = cardW.value * scale
-    const ch = cardH.value * scale
-    const cx = zone.x + (zone.w - cw) / 2
-    const cy = zone.y + (zone.h - ch) / 2
+    const MAX_VISIBLE = 6
+    const ANGLE_STEP = -10
 
     const start = Math.max(0, n - MAX_VISIBLE)
+    const cx = zone.x + (zone.w - cw) / 2
+    const cy = zone.y + (zone.h - ch) / 2
 
     for (let i = 0; i < n; i++) {
       if (i < start) continue
@@ -153,7 +173,8 @@ export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
       out.set(cards[i].cardId, {
         x: cx, y: cy,
         w: cw, h: ch,
-        rotation: depthFromTop * ROT_PER_LEVEL,
+        rotation: 0,
+        cssRotation: depthFromTop * ANGLE_STEP,
         z: i,
       })
     }
@@ -182,21 +203,26 @@ export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
     const local = store.myUid
     const result: Record<string, Rect> = {}
 
-    const emitBF = (prefix: string, x: number, w: number, ownerAtBottom: boolean) => {
-      result[`${prefix}${SEPARATOR}battlefield`] = { x, y: ybf, w, h: bfH }
-      result[`${prefix}_battlefield`] = {
+    // ownerId   = who owns this physical battlefield (their cards go in battlefield_owner row)
+    // attackerId = the opposing player (their cards go in battlefield_opponent row on THIS field)
+    // The key insight: battlefield_opponent is prefixed by attackerId so that
+    // local player's cards on opponent's bf are keyed as `localId:battlefield_opponent`
+    const emitBF = (ownerId: string, attackerId: string, x: number, w: number, ownerAtBottom: boolean) => {
+      result[`${ownerId}${SEPARATOR}battlefield`] = { x, y: ybf, w, h: bfH }
+      result[`${ownerId}_battlefield`] = {
         x: x + (w - bfCardH) / 2,
         y: ybf + (bfH - bfCardW) / 2,
         w: bfCardH,
         h: bfCardW,
       }
-      result[`${prefix}${SEPARATOR}battlefield_owner`] = {
+      result[`${ownerId}${SEPARATOR}battlefield_owner`] = {
         x: x + GAP,
         y: ownerAtBottom ? ybf + bfH - cardSlot.h - INSIDE_MARGIN : ybf + INSIDE_MARGIN,
         w: w - 2 * GAP,
         h: cardSlot.h,
       }
-      result[`${prefix}${SEPARATOR}battlefield_opponent`] = {
+      // attackerId prefix: localId's attacking cards live on the opponent's physical battlefield
+      result[`${attackerId}${SEPARATOR}battlefield_opponent`] = {
         x: x + GAP,
         y: ownerAtBottom ? ybf + INSIDE_MARGIN : ybf + bfH - cardSlot.h - INSIDE_MARGIN,
         w: w - 2 * GAP,
@@ -249,11 +275,11 @@ export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
     emitPlayerRows(opponent,     top, v => v)
     emitPlayerRows(local ?? '', top, mirror)
 
-    emitBF(local ?? '', LEFT_X,                                              bfW, true)
-    emitBF(opponent,    LEFT_X + (hasBaronNashor ? 2 : 1) * (bfW + GAP),    bfW, false)
+    emitBF(local ?? '', opponent,    LEFT_X,                                           bfW, true)
+    emitBF(opponent,    local ?? '', LEFT_X + (hasBaronNashor ? 2 : 1) * (bfW + GAP), bfW, false)
 
     if (hasBaronNashor) {
-      emitBF('baron_nashor', LEFT_X + bfW + GAP, bfW, true)
+      emitBF('baron_nashor', local ?? '', LEFT_X + bfW + GAP, bfW, true)
     }
 
     result['stack'] = { x: W.value - OUTSIDE_MARGIN - STACK.w, y: ybf, w: STACK.w, h: bfH }
@@ -280,7 +306,8 @@ export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
       const playerId = key.split(SEPARATOR)[0]
       const zone = key.slice(key.indexOf(SEPARATOR) + 1) as ZoneId
       // Zones for player rows use underscore separator, battlefield zones use colon
-      const rect = zones.value[key] ?? zones.value[`${playerId}_${zone}`]
+      // Fallback chain: colon key → underscore key → bare zone name (e.g. 'stack')
+      const rect = zones.value[key] ?? zones.value[`${playerId}_${zone}`] ?? zones.value[zone]
       if (!rect) continue
 
       list.sort((a, b) => a.order - b.order)

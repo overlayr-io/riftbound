@@ -6,7 +6,8 @@ export interface Rect {
   h: number
 }
 
-export interface CardLayout extends Rect{
-  z: number,
-  rotation: number,
+export interface CardLayout extends Rect {
+  z: number
+  rotation: number
+  cssRotation?: number
 }

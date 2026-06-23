@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { doc, onSnapshot, type Unsubscribe } from 'firebase/firestore'
-import type { Card, DeckList, GameMode, GameMatchFormat, GameDeckFormat, GameRound } from '@riftbound/shared'
+import { doc, onSnapshot, updateDoc, serverTimestamp, type Unsubscribe } from 'firebase/firestore'
+import type { Card, DeckList, GameMode, GameMatchFormat, GameDeckFormat, GameRound, ZoneId } from '@riftbound/shared'
 import type { PlayerId } from '@riftbound/shared'
 import { firestore } from '@/firebase'
 import { useAuthStore } from './auth'
@@ -10,6 +10,9 @@ import { DeckParser } from '@/utils/deckParser'
 
 export const useGameStore = defineStore('game', () => {
   const authStore = useAuthStore()
+
+  // Unique per browser tab — used to filter own Firestore echoes
+  const sessionId = Math.random().toString(36).slice(2, 10)
 
   // ── Game metadata ────────────────────────────────────────────────────────────
   const gameId = ref<string | null>(null)
@@ -88,6 +91,8 @@ export const useGameStore = defineStore('game', () => {
       (snap) => {
         if (!snap.exists()) return
         const d = snap.data()
+        // Echo guard: skip own writes (optimistic update already applied locally)
+        if (d['_updatedBy'] === sessionId) return
         currentRound.value = {
           roundId: snap.id,
           gameId: d.gameId,
@@ -211,6 +216,88 @@ export const useGameStore = defineStore('game', () => {
     await gameApi.devSkipSetup(gameId.value, currentRoundId.value, playersDecks)
   }
 
+  // ── Direct Firestore game actions (client-side, optimistic) ──────────────────
+
+  function roundRef() {
+    const gId = gameId.value
+    const rId = currentRoundId.value
+    if (!gId || !rId) return null
+    return doc(firestore, 'games', gId, 'rounds', rId)
+  }
+
+  function moveCard(cardId: string, toZoneId: ZoneId) {
+    const round = currentRound.value
+    if (!round?.cards[cardId]) return
+    const ref = roundRef()
+    if (!ref) return
+
+    const targetCards = Object.values(round.cards).filter(c => c.zoneId === toZoneId)
+    const newOrder = targetCards.length > 0 ? Math.max(...targetCards.map(c => c.order)) + 1 : 0
+
+    // Optimistic update → CSS transition fires immediately
+    round.cards[cardId] = { ...round.cards[cardId], zoneId: toZoneId, order: newOrder }
+
+    updateDoc(ref, {
+      [`cards.${cardId}.zoneId`]: toZoneId,
+      [`cards.${cardId}.order`]: newOrder,
+      _updatedBy: sessionId,
+      updatedAt: serverTimestamp(),
+    }).catch(console.error)
+  }
+
+  function drawTopCard(ownerId: string, fromZone: ZoneId, toZone: ZoneId) {
+    const round = currentRound.value
+    if (!round) return
+    const ref = roundRef()
+    if (!ref) return
+
+    const topCard = Object.values(round.cards)
+      .filter(c => c.ownerId === ownerId && c.zoneId === fromZone)
+      .sort((a, b) => b.order - a.order)[0]
+    if (!topCard) return
+
+    const toCards = Object.values(round.cards)
+      .filter(c => c.ownerId === ownerId && c.zoneId === toZone)
+    const newOrder = toCards.length > 0 ? Math.max(...toCards.map(c => c.order)) + 1 : 0
+
+    // Optimistic update → card animates instantly from deck to hand
+    round.cards[topCard.cardId] = {
+      ...round.cards[topCard.cardId],
+      zoneId: toZone,
+      order: newOrder,
+      state: { ...round.cards[topCard.cardId].state, visibleTo: 'SELF' },
+    }
+
+    updateDoc(ref, {
+      [`cards.${topCard.cardId}.zoneId`]: toZone,
+      [`cards.${topCard.cardId}.order`]: newOrder,
+      [`cards.${topCard.cardId}.state.visibleTo`]: 'SELF',
+      _updatedBy: sessionId,
+      updatedAt: serverTimestamp(),
+    }).catch(console.error)
+  }
+
+  function toggleExhausted(cardId: string) {
+    const round = currentRound.value
+    if (!round?.cards[cardId]) return
+    const ref = roundRef()
+    if (!ref) return
+
+    const newValue = !round.cards[cardId].state.exhausted
+
+    // Optimistic update
+    round.cards[cardId] = {
+      ...round.cards[cardId],
+      state: { ...round.cards[cardId].state, exhausted: newValue },
+    }
+
+    updateDoc(ref, {
+      [`cards.${cardId}.state.exhausted`]: newValue,
+      _updatedBy: sessionId,
+      updatedAt: serverTimestamp(),
+    }).catch(console.error)
+  }
+
   return {
     gameId,
     mode,
@@ -242,5 +329,8 @@ export const useGameStore = defineStore('game', () => {
     confirmDiscard,
     submitMulligan,
     devSkipSetup,
+    moveCard,
+    drawTopCard,
+    toggleExhausted,
   }
 })
