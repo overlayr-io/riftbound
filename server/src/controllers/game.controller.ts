@@ -119,7 +119,11 @@ export async function devSkipSetup(req: Request, res: Response, next: NextFuncti
   try {
     const gameId = param(req.params.gameId)
     const roundId = param(req.params.roundId)
-    await gameService.devSkipSetup(gameId, roundId)
+    const { playersDecks } = req.body
+    if (!playersDecks || typeof playersDecks !== 'object') {
+      res.status(400).json({ error: 'Missing playersDecks' }); return
+    }
+    await gameService.devSkipSetup(gameId, roundId, playersDecks)
     res.status(204).send()
   } catch (err: any) {
     if (err.status) { res.status(err.status).json({ error: err.message }); return }

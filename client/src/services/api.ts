@@ -148,7 +148,7 @@ export const gameApi = {
     return requestGame('POST', `/${gameId}/rounds/${roundId}/mulligan`, { count })
   },
 
-  devSkipSetup(gameId: string, roundId: string): Promise<void> {
-    return requestGame('POST', `/${gameId}/rounds/${roundId}/dev-skip`)
+  devSkipSetup(gameId: string, roundId: string, playersDecks: Record<string, unknown>): Promise<void> {
+    return requestGame('POST', `/${gameId}/rounds/${roundId}/dev-skip`, { playersDecks })
   },
 }

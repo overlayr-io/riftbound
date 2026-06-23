@@ -11,6 +11,7 @@ const props = defineProps<{
 <template>
   <div
       class="card"
+      :class="{ 'card-battlefield': card.description.type === 'battlefield' }"
       :style="{
         transform: `translate(${layout.x}px, ${layout.y}px) rotate(${layout.rotation}deg)`,
         width: layout.w + 'px',
@@ -46,10 +47,14 @@ const props = defineProps<{
   box-shadow: 0 2px 8px rgba(0,0,0,0.5);
 }
 
+.card-battlefield {
+  box-shadow: none;
+}
+
 .card-image {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
   border-radius: 4px;
 }

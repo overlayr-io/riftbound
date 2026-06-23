@@ -1,4 +1,4 @@
-import type { Card, GameMatchFormat, GameDeckFormat } from '@riftbound/shared'
+import type { Card, DeckList, GameMatchFormat, GameDeckFormat } from '@riftbound/shared'
 import type { PlayerId } from '@riftbound/shared'
 import { GameRepository } from '../repositories/game.repository'
 import { LobbyRepository } from '../repositories/lobby.repository'
@@ -167,8 +167,8 @@ export class GameService {
     await this.gameRepo.confirmDiscard(gameId, roundId)
   }
 
-  async devSkipSetup(gameId: string, roundId: string): Promise<void> {
-    await this.gameRepo.devSkipSetup(gameId, roundId)
+  async devSkipSetup(gameId: string, roundId: string, playersDecks: Record<string, DeckList>): Promise<void> {
+    await this.gameRepo.devSkipSetup(gameId, roundId, playersDecks)
   }
 
   async submitMulligan(

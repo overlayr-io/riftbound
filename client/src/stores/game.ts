@@ -203,7 +203,12 @@ export const useGameStore = defineStore('game', () => {
 
   async function devSkipSetup(): Promise<void> {
     if (!gameId.value || !currentRoundId.value) return
-    await gameApi.devSkipSetup(gameId.value, currentRoundId.value)
+    const DEV_DECK = "Legend:\n1 Kha'Zix, Voidreaver\n\nChampion:\n1 Kha'Zix, Evolving Hunter\n\nMainDeck:\n3 Grim Resolve\n3 Irresistible Faefolk\n3 Void Assault\n\nBattlefields:\n1 Monastery of Hirana\n1 The Arena's Greatest\n1 Star Spring\n\nRunes:\n7 Body Rune\n5 Chaos Rune"
+    const playersDecks: Record<string, DeckList> = {}
+    for (const uid of playerIds.value) {
+      playersDecks[uid] = await new DeckParser().parse(DEV_DECK)
+    }
+    await gameApi.devSkipSetup(gameId.value, currentRoundId.value, playersDecks)
   }
 
   return {

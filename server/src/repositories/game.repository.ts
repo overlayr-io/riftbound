@@ -1,4 +1,4 @@
-import type { Card, CardId, GameMode, GameMatchFormat, GameDeckFormat, GameRound, GameSetupStep } from '@riftbound/shared'
+import type { Card, CardId, CardState, DeckList, GameMode, GameMatchFormat, GameDeckFormat, GameRound, GameSetupStep } from '@riftbound/shared'
 import type { PlayerId, PlayerState } from '@riftbound/shared'
 import { db } from '../config/firebase'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -200,6 +200,7 @@ export class GameRepository {
   async devSkipSetup(
     gameId: string,
     roundId: string,
+    playersDecks: Record<PlayerId, DeckList>,
   ): Promise<void> {
     const roundRef = this.col.doc(gameId).collection('rounds').doc(roundId)
     const snap = await roundRef.get()
@@ -208,13 +209,22 @@ export class GameRepository {
     const playerIds = Object.keys(data.players ?? {}) as PlayerId[]
     const diceWinnerId = playerIds[Math.floor(Math.random() * playerIds.length)]
 
-    const fakeCard = (uid: PlayerId, type: 'legend' | 'battlefield'): Card => ({
-      id: `dev-${type}-${uid}`,
-      baseCardId: `dev-${type}`,
-      name: type === 'legend' ? 'Légende Dev' : 'Champ Dev',
-      type,
-      imageUrl: '',
-    })
+    const cards: Record<CardId, CardState> = {}
+    let order = 0
+
+    function addCard(card: Card, ownerId: PlayerId, zoneId: CardState['zoneId']): void {
+      cards[card.id] = {
+        cardId: card.id,
+        baseCardId: card.baseCardId,
+        description: { name: card.name, type: card.type, imageUrl: card.imageUrl },
+        ownerId,
+        controllerId: ownerId,
+        zoneId,
+        order: order++,
+        state: { exhausted: false, counters: null, damages: null, buffs: null, visibleTo: 'ALL', groupTo: [] },
+        isToken: false,
+      }
+    }
 
     const update: Record<string, unknown> = {
       setup: 'completed' as GameSetupStep,
@@ -225,14 +235,28 @@ export class GameRepository {
     }
 
     for (const uid of playerIds) {
+      const deck = playersDecks[uid]
+      if (!deck) throw Object.assign(new Error(`MISSING_DECK_FOR_${uid}`), {status: 400})
+
+      const bf = deck.battlefields[Math.floor(Math.random() * deck.battlefields.length)] ?? null
+      const legendCard = deck.legend
+
       update[`players.${uid}.hasSubmittedDeck`] = true
-      update[`players.${uid}.legendCard`] = fakeCard(uid, 'legend')
-      update[`players.${uid}.submittedBattlefield`] = `dev-battlefield-${uid}`
-      update[`players.${uid}.battlefieldCard`] = fakeCard(uid, 'battlefield')
+      update[`players.${uid}.legendCard`] = legendCard ?? null
+      update[`players.${uid}.submittedBattlefield`] = bf?.id ?? null
+      update[`players.${uid}.battlefieldCard`] = bf ?? null
       update[`players.${uid}.diceRoll`] = Math.floor(Math.random() * 20) + 1
       update[`players.${uid}.mulliganCount`] = 0
       update[`players.${uid}.mulliganDone`] = true
+
+      if (legendCard) addCard(legendCard, uid, 'legend')
+      if (deck.champion) addCard(deck.champion, uid, 'champion')
+      for (const c of deck.mainDeck) addCard(c, uid, 'main_deck')
+      for (const c of deck.runes) addCard(c, uid, 'runes_deck')
+      if (bf) addCard(bf, uid, 'battlefield')
     }
+
+    update['cards'] = cards
 
     await roundRef.update(update)
   }
