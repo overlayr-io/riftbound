@@ -81,6 +81,21 @@ export type RevealCardForSelfAction = {
   cardId: string
 }
 
+// ── Group actions ─────────────────────────────────────────────────────────────
+
+export type GroupCardAction = {
+  type: 'GROUP_CARD'
+  playerId: PlayerId
+  parentId: string
+  childId: string
+}
+
+export type UngroupCardAction = {
+  type: 'UNGROUP_CARD'
+  playerId: PlayerId
+  cardId: string
+}
+
 // ── State actions ─────────────────────────────────────────────────────────────
 
 export type ToggleExhaustedAction = {
@@ -124,6 +139,8 @@ export type GameAction =
   | HideCardAction
   | RevealCardAction
   | RevealCardForSelfAction
+  | GroupCardAction
+  | UngroupCardAction
   | ToggleExhaustedAction
   | SetCountersAction
   | SetDamagesAction

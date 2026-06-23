@@ -98,7 +98,11 @@ export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
     if (n === 0) return
 
     // Exhausted card lies on its side → takes ch as horizontal footprint
-    const footprintW = cards.map(c => c.state.exhausted ? ch : cw)
+    const footprintW = cards.map(c => {
+      const base = c.state.exhausted ? ch : cw
+      const groupExtra = (c.state.groupTo?.length ?? 0) * cw * 0.55
+      return base + groupExtra
+    })
 
     const naturalXs: number[] = [0]
     for (let i = 1; i < n; i++) naturalXs.push(naturalXs[i - 1] + footprintW[i - 1] + GAP)
@@ -118,9 +122,11 @@ export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
 
     cards.forEach((card, i) => {
       const z = invertZ ? (n - 1 - i) : i
+      // Parent cards with children: shift right within their footprint to leave space on the left for children
+      const groupShift = (card.state.groupTo?.length ?? 0) * cw * 0.55
       if (card.state.exhausted) {
         out.set(card.cardId, {
-          x: xs[i] + (ch - cw) / 2,   // center the rotated card in its footprint
+          x: xs[i] + groupShift + (ch - cw) / 2,
           y: zone.y + (zone.h - ch) / 2,
           w: cw, h: ch,
           rotation: 90,
@@ -128,7 +134,7 @@ export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
         })
       } else {
         out.set(card.cardId, {
-          x: xs[i],
+          x: xs[i] + groupShift,
           y: zone.y + (zone.h - ch) / 2,
           w: cw, h: ch,
           rotation: 0,
@@ -294,8 +300,15 @@ export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
     const cardList = toValue(cards)
     const myUid = store.myUid
 
+    // Build the set of card IDs that are grouped as children
+    const childIds = new Set<string>()
+    for (const c of cardList) {
+      for (const childId of (c.state.groupTo ?? [])) childIds.add(childId)
+    }
+
     const groups = new Map<string, CardState[]>()
     for (const c of cardList) {
+      if (childIds.has(c.cardId)) continue  // skip grouped children from zone layout
       const key = `${c.ownerId}${SEPARATOR}${c.zoneId}`
       let list = groups.get(key)
       if (!list) groups.set(key, (list = []))
@@ -343,6 +356,32 @@ export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
           layoutStack(rect, list, out)
           break
       }
+    }
+
+    // Post-process: position grouped children to the side of their parent.
+    // Local player zones are mirrored (x grows leftward), so offset direction is flipped.
+    for (const c of cardList) {
+      if (!c.state.groupTo?.length) continue
+      const parentLayout = out.get(c.cardId)
+      if (!parentLayout) continue
+
+      const children = c.state.groupTo
+        .map(id => cardList.find(cc => cc.cardId === id))
+        .filter((cc): cc is CardState => !!cc)
+
+      const cw = parentLayout.w
+      const ch = parentLayout.h
+      // Children spread to the left, each offset by 0.55×cw further
+      children.forEach((child, i) => {
+        out.set(child.cardId, {
+          x: parentLayout.x - cw * 0.55 * (i + 1),
+          y: parentLayout.y + ch * 0.10,
+          w: cw,
+          h: ch,
+          rotation: 0,
+          z: parentLayout.z - 1 - i,
+        })
+      })
     }
 
     return out

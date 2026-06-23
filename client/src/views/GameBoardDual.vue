@@ -27,6 +27,19 @@ shortcuts.define({
   },
 })
 
+shortcuts.define({
+  key: 'g',
+  hint: 'Clique la carte parent',
+  cardTarget: 'sequence',
+  sequenceHints: [
+    'Clique la carte à grouper',
+    'Clique la carte parent',
+  ],
+  onSequence: ([child, parent]) => {
+    store.applyAction({ type: 'GROUP_CARD', playerId: parent.controllerId, parentId: parent.cardId, childId: child.cardId })
+  },
+})
+
 // ── Cards ─────────────────────────────────────────────────────────────────────
 
 const allCards = computed<readonly CardState[]>(() =>
@@ -80,6 +93,13 @@ function onZoneClick(key: string) {
     .sort((a, b) => b.order - a.order)[0]
   if (!topCard) return
   store.applyAction(makeAction(owner, topCard.cardId, zone as ZoneId))
+}
+
+function resolveStack(key: string) {
+  const stackCards = allCards.value.filter(c => c.zoneId === 'stack')
+  for (const card of stackCards) {
+    store.applyAction({ type: 'DISCARD_CARD', playerId: card.controllerId, cardId: card.cardId, fromZoneId: 'stack' })
+  }
 }
 
 function isClickableZone(key: string): boolean {
@@ -237,6 +257,16 @@ function bleedRect(rect: Rect): Rect {
             @click="onZoneClick(String(key))"
           />
 
+          <!-- Résoudre button for stack zone -->
+          <div
+            v-if="parseZoneKey(String(key)).zone === 'stack' && (zoneCounts[String(key)] ?? 0) > 0"
+            class="zone-overlay"
+            style="pointer-events: auto"
+            :style="{ left: rect.x + 'px', top: rect.y + 'px', width: rect.w + 'px', height: rect.h + 'px' }"
+          >
+            <button class="resolve-btn" @click="resolveStack(String(key))">Résoudre</button>
+          </div>
+
         </template>
       </div>
 
@@ -345,4 +375,29 @@ function bleedRect(rect: Rect): Rect {
 
 .zone-count--top-right   { top: 4px;    right: 4px; }
 .zone-count--bottom-left { bottom: 4px; left: 4px; }
+
+/* Resolve stack button */
+.resolve-btn {
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 200, 80, 0.6);
+  background: rgba(255, 180, 40, 0.15);
+  color: rgba(255, 210, 100, 0.95);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.resolve-btn:hover {
+  background: rgba(255, 180, 40, 0.3);
+  border-color: rgba(255, 200, 80, 0.9);
+}
 </style>

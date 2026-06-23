@@ -266,6 +266,39 @@ export const useGameStore = defineStore('game', () => {
     }).catch(console.error)
   }
 
+  const DISSOLVE_GROUP_ZONES = new Set<ZoneId>(['discard', 'banish', 'hand', 'main_deck', 'runes_deck'])
+
+  // Remove a card from any group it belongs to (as parent or child)
+  function dissolveGroup(cardId: string, ref: ReturnType<typeof roundRef>) {
+    const round = currentRound.value
+    if (!round || !ref) return
+    const updates: Record<string, unknown> = {}
+
+    // Clear children if this card is a parent
+    const card = round.cards[cardId]
+    if (card?.state.groupTo?.length) {
+      round.cards[cardId] = { ...card, state: { ...card.state, groupTo: [] } }
+      updates[`cards.${cardId}.state.groupTo`] = []
+    }
+
+    // Remove this card from any parent's groupTo
+    for (const [id, c] of Object.entries(round.cards)) {
+      if (id === cardId) continue
+      const idx = c.state.groupTo?.indexOf(cardId) ?? -1
+      if (idx === -1) continue
+      const newGroupTo = c.state.groupTo!.filter(gid => gid !== cardId)
+      round.cards[id] = { ...c, state: { ...c.state, groupTo: newGroupTo } }
+      updates[`cards.${id}.state.groupTo`] = newGroupTo
+    }
+
+    if (Object.keys(updates).length) {
+      updateDoc(ref, { ...updates, _updatedBy: sessionId, updatedAt: serverTimestamp() }).catch(console.error)
+    }
+  }
+
+  // Zones where cards are placed permanently — exhausted state is managed manually
+  const NO_AUTO_EXHAUST_ZONES = new Set<ZoneId>(['champion', 'legend', 'hand', 'main_deck', 'runes_deck'])
+
   // Core primitive — all game actions funnel through this
   function commitMove(cardId: string, toZoneId: ZoneId, overrideVisibility?: CardVisibleTo) {
     const round = currentRound.value
@@ -273,9 +306,12 @@ export const useGameStore = defineStore('game', () => {
     const ref = roundRef()
     if (!ref) return
 
+    if (DISSOLVE_GROUP_ZONES.has(toZoneId)) dissolveGroup(cardId, ref)
+
     const newOrder = Math.max(-1, ...Object.values(round.cards).filter(c => c.zoneId === toZoneId).map(c => c.order)) + 1
     const newVisibility = overrideVisibility ?? resolveVisibility(cardId, toZoneId)
     const isHidden = newVisibility === 'NOBODY'
+    const shouldExhaust = !isHidden && !NO_AUTO_EXHAUST_ZONES.has(toZoneId)
 
     round.cards[cardId] = {
       ...round.cards[cardId],
@@ -284,7 +320,7 @@ export const useGameStore = defineStore('game', () => {
       state: {
         ...round.cards[cardId].state,
         visibleTo: newVisibility,
-        exhausted: isHidden ? round.cards[cardId].state.exhausted : true,
+        ...(shouldExhaust ? { exhausted: true } : {}),
       },
     }
 
@@ -292,7 +328,7 @@ export const useGameStore = defineStore('game', () => {
       [`cards.${cardId}.zoneId`]: toZoneId,
       [`cards.${cardId}.order`]: newOrder,
       [`cards.${cardId}.state.visibleTo`]: newVisibility,
-      ...(!isHidden ? { [`cards.${cardId}.state.exhausted`]: true } : {}),
+      ...(shouldExhaust ? { [`cards.${cardId}.state.exhausted`]: true } : {}),
       _updatedBy: sessionId,
       updatedAt: serverTimestamp(),
     }).catch(console.error)
@@ -380,6 +416,52 @@ export const useGameStore = defineStore('game', () => {
           _updatedBy: sessionId,
           updatedAt: serverTimestamp(),
         }).catch(console.error)
+        break
+      }
+
+      case 'GROUP_CARD': {
+        const parent = round.cards[action.parentId]
+        const child  = round.cards[action.childId]
+        if (!parent || !child) return
+        // A card that already has children cannot become a child
+        if (child.state.groupTo?.length) return
+
+        // Remove child from any existing parent first
+        const updates: Record<string, unknown> = {}
+        for (const [id, c] of Object.entries(round.cards)) {
+          const idx = c.state.groupTo?.indexOf(action.childId) ?? -1
+          if (idx === -1) continue
+          const ng = c.state.groupTo!.filter(gid => gid !== action.childId)
+          round.cards[id] = { ...c, state: { ...c.state, groupTo: ng } }
+          updates[`cards.${id}.state.groupTo`] = ng
+        }
+
+        const newGroupTo = [...(parent.state.groupTo ?? []), action.childId]
+        round.cards[action.parentId] = { ...parent, state: { ...parent.state, groupTo: newGroupTo } }
+        updates[`cards.${action.parentId}.state.groupTo`] = newGroupTo
+
+        updateDoc(ref, { ...updates, _updatedBy: sessionId, updatedAt: serverTimestamp() }).catch(console.error)
+        break
+      }
+
+      case 'UNGROUP_CARD': {
+        const updates: Record<string, unknown> = {}
+        for (const [id, c] of Object.entries(round.cards)) {
+          const idx = c.state.groupTo?.indexOf(action.cardId) ?? -1
+          if (idx === -1) continue
+          const ng = c.state.groupTo!.filter(gid => gid !== action.cardId)
+          round.cards[id] = { ...c, state: { ...c.state, groupTo: ng } }
+          updates[`cards.${id}.state.groupTo`] = ng
+        }
+        // Also clear groupTo if this card itself is a parent
+        const self = round.cards[action.cardId]
+        if (self?.state.groupTo?.length) {
+          round.cards[action.cardId] = { ...self, state: { ...self.state, groupTo: [] } }
+          updates[`cards.${action.cardId}.state.groupTo`] = []
+        }
+        if (Object.keys(updates).length) {
+          updateDoc(ref, { ...updates, _updatedBy: sessionId, updatedAt: serverTimestamp() }).catch(console.error)
+        }
         break
       }
 

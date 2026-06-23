@@ -125,6 +125,17 @@ function onKeyUp(e: KeyboardEvent) {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
+function activateWithSeed(key: string, firstCard: CardState) {
+  const def = _registry.get(key)
+  if (!def?.cardTarget) return
+  if (_activeKey.value !== key) {
+    if (_activeKey.value) cancel()
+    _activeKey.value = key
+  }
+  _sequence.value = [firstCard]
+  showHint(def.sequenceHints?.[1] ?? def.hint)
+}
+
 export function useBoardShortcuts() {
   if (!_attached) {
     document.addEventListener('keydown', onKeyDown)
@@ -141,5 +152,7 @@ export function useBoardShortcuts() {
     define(def: ShortcutDef) { _registry.set(def.key, def) },
     handleCardClick,
     cancel,
+    /** Activate a sequence shortcut with the first card pre-seeded (e.g. from context menu). */
+    activateWithSeed,
   }
 }

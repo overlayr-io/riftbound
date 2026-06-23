@@ -2,6 +2,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import type { CardState, CardVisibleTo } from '@riftbound/shared'
 import { useGameStore } from '@/stores/game'
+import { useBoardShortcuts } from '@/composables/useBoardShortcuts'
 
 const props = defineProps<{
   visible: boolean
@@ -16,6 +17,27 @@ const emit = defineEmits<{
 }>()
 
 const gameStore = useGameStore()
+const shortcuts = useBoardShortcuts()
+
+const hasChildren = computed(() => (props.card?.state.groupTo?.length ?? 0) > 0)
+const isChild = computed(() => {
+  if (!props.card) return false
+  return Object.values(gameStore.currentRound?.cards ?? {}).some(
+    c => c.state.groupTo?.includes(props.card!.cardId)
+  )
+})
+
+function startGrouping() {
+  if (!props.card) return
+  emit('close')
+  shortcuts.activateWithSeed('g', props.card)
+}
+
+function ungroup() {
+  if (!props.card) return
+  gameStore.applyAction({ type: 'UNGROUP_CARD', playerId: props.currentPlayerId, cardId: props.card.cardId })
+  emit('close')
+}
 
 const activeSubmenu = ref<string | null>(null)
 let closeTimer: ReturnType<typeof setTimeout> | null = null
@@ -237,6 +259,33 @@ function adjustCounter(field: 'counters' | 'damages' | 'buffs', delta: number) {
             <span class="ctx-val">{{ card.state.buffs ?? 0 }}</span>
             <button class="ctx-btn ctx-btn--neutral ctx-btn--plus" @click.stop="adjustCounter('buffs', 1)">+</button>
           </div>
+        </div>
+
+        <div class="ctx-sep" />
+
+        <!-- Grouper -->
+        <div class="ctx-item ctx-item--group" @click="startGrouping">
+          <span class="ctx-icon">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="5" width="7" height="9" rx="1"/><rect x="8" y="2" width="7" height="9" rx="1"/></svg>
+          </span>
+          <span class="ctx-label">Grouper</span>
+          <kbd class="ctx-kbd">G</kbd>
+        </div>
+
+        <!-- Dégrouper (parent avec enfants) -->
+        <div v-if="hasChildren" class="ctx-item ctx-item--ungroup" @click="ungroup">
+          <span class="ctx-icon">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="5" width="7" height="9" rx="1"/><rect x="8" y="2" width="7" height="9" rx="1"/><line x1="1" y1="1" x2="15" y2="15"/></svg>
+          </span>
+          <span class="ctx-label">Dégrouper tout</span>
+        </div>
+
+        <!-- Retirer du groupe (enfant) -->
+        <div v-if="isChild" class="ctx-item ctx-item--ungroup" @click="ungroup">
+          <span class="ctx-icon">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="5" width="7" height="9" rx="1"/><rect x="8" y="2" width="7" height="9" rx="1"/><line x1="1" y1="1" x2="15" y2="15"/></svg>
+          </span>
+          <span class="ctx-label">Retirer du groupe</span>
         </div>
 
       </div>
@@ -503,4 +552,19 @@ function adjustCounter(field: 'counters' | 'damages' | 'buffs', delta: number) {
   border-radius: 50%;
   background: #C8AA6E;
 }
+
+.ctx-kbd {
+  font-size: 9px;
+  padding: 1px 5px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  color: rgba(255, 255, 255, 0.35);
+  font-family: inherit;
+  letter-spacing: 0.04em;
+}
+
+.ctx-item--group:hover  { color: #a0e8c0; background: rgba(60, 200, 130, 0.07); }
+.ctx-item--ungroup      { color: #8aabb0; font-size: 10px; }
+.ctx-item--ungroup:hover { color: #e09060; background: rgba(200, 100, 60, 0.07); }
 </style>
