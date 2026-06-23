@@ -67,13 +67,22 @@ export function useDrag(
   const hoveredZone = ref<string | null>(null)
   const hoveredZoneValid = ref(false)
 
-  const CLICK_THRESHOLD = 5
+  // Distance threshold to enter drag mode
+  const DRAG_THRESHOLD = 6
+  // Max duration of a "tap" — hold longer without moving = no action on release
+  const CLICK_MAX_MS = 220
 
   let offsetX = 0
   let offsetY = 0
   let startX = 0
   let startY = 0
-  let hasMoved = false
+  let pointerDownAt = 0
+  let isDragging = false
+  // Snapshot of the card's zone at pointer-down, to skip Firestore write on same-zone drop
+  let originZone: string | null = null
+  let pendingCardId: string | null = null
+  let pendingOwnerId: string | null = null
+  let pendingLayout: { x: number; y: number; w: number; h: number; rotation?: number; cssRotation?: number } | null = null
   let pendingClick: (() => void) | undefined
   let captureEl: HTMLElement | null = null
 
@@ -89,48 +98,97 @@ export function useDrag(
     offsetY = e.clientY - layout.y
     startX = e.clientX
     startY = e.clientY
-    hasMoved = false
+    pointerDownAt = Date.now()
+    isDragging = false
     pendingClick = onClick
-    dragging.value = { cardId, ownerId, x: layout.x, y: layout.y, w: layout.w, h: layout.h, rotation: layout.rotation, cssRotation: layout.cssRotation }
+    pendingCardId = cardId
+    pendingOwnerId = ownerId
+    pendingLayout = layout
     hoveredZone.value = null
     hoveredZoneValid.value = false
+
+    // Snapshot the card's current zone for same-zone drop detection
+    const card = cards.value.find(c => c.cardId === cardId)
+    originZone = card?.zoneId ?? null
 
     captureEl = e.currentTarget as HTMLElement
     try { captureEl.setPointerCapture(e.pointerId) } catch { /* synthetic events */ }
     captureEl.addEventListener('pointermove', onMove as EventListener)
     captureEl.addEventListener('pointerup', onUp as EventListener)
-    captureEl.addEventListener('pointercancel', onUp as EventListener)
+    captureEl.addEventListener('pointercancel', onCancel as EventListener)
   }
 
   function onMove(e: PointerEvent) {
-    if (!dragging.value) return
     const dx = e.clientX - startX
     const dy = e.clientY - startY
-    if (!hasMoved && Math.sqrt(dx * dx + dy * dy) > CLICK_THRESHOLD) hasMoved = true
-    dragging.value = { ...dragging.value, x: e.clientX - offsetX, y: e.clientY - offsetY }
+
+    if (!isDragging) {
+      if (Math.sqrt(dx * dx + dy * dy) <= DRAG_THRESHOLD) return
+      // Threshold exceeded → enter drag mode
+      isDragging = true
+      dragging.value = {
+        cardId: pendingCardId!,
+        ownerId: pendingOwnerId!,
+        x: e.clientX - offsetX,
+        y: e.clientY - offsetY,
+        w: pendingLayout!.w,
+        h: pendingLayout!.h,
+        rotation: pendingLayout!.rotation,
+        cssRotation: pendingLayout!.cssRotation,
+      }
+    }
+
+    dragging.value = { ...dragging.value!, x: e.clientX - offsetX, y: e.clientY - offsetY }
     const zone = hitTest(e.clientX, e.clientY)
     hoveredZone.value = zone
-    const card = cards.value.find(c => c.cardId === dragging.value!.cardId) ?? null
+    const card = cards.value.find(c => c.cardId === pendingCardId) ?? null
     hoveredZoneValid.value = zone !== null && card !== null && isValidDrop(card, zone)
   }
 
-  function onUp(_e: PointerEvent) {
+  function cleanup() {
     captureEl?.removeEventListener('pointermove', onMove as EventListener)
     captureEl?.removeEventListener('pointerup', onUp as EventListener)
-    captureEl?.removeEventListener('pointercancel', onUp as EventListener)
+    captureEl?.removeEventListener('pointercancel', onCancel as EventListener)
     captureEl = null
-
-    if (!hasMoved) {
-      pendingClick?.()
-    } else if (dragging.value && hoveredZone.value && hoveredZoneValid.value) {
-      const { zone } = parseZoneKey(hoveredZone.value)
-      moveCard(dragging.value.cardId, zone as ZoneId)
-    }
-
     dragging.value = null
     hoveredZone.value = null
     hoveredZoneValid.value = false
+    isDragging = false
+    pendingCardId = null
+    pendingOwnerId = null
+    pendingLayout = null
     pendingClick = undefined
+    originZone = null
+  }
+
+  function onUp(_e: PointerEvent) {
+    if (!isDragging) {
+      // No drag started — decide between click and hold-and-release
+      const elapsed = Date.now() - pointerDownAt
+      if (elapsed < CLICK_MAX_MS) {
+        const cb = pendingClick
+        cleanup()
+        cb?.()
+        return
+      }
+      // Held without moving → no action
+      cleanup()
+      return
+    }
+
+    // Drag ended — only write to Firestore if the zone actually changed
+    if (dragging.value && hoveredZone.value && hoveredZoneValid.value) {
+      const { zone } = parseZoneKey(hoveredZone.value)
+      if (zone !== originZone) {
+        moveCard(dragging.value.cardId, zone as ZoneId)
+      }
+    }
+
+    cleanup()
+  }
+
+  function onCancel() {
+    cleanup()
   }
 
   function hitTest(px: number, py: number): string | null {
