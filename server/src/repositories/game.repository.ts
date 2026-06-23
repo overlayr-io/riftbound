@@ -1,4 +1,7 @@
-import type { Card, CardId, CardState, DeckList, GameMode, GameMatchFormat, GameDeckFormat, GameRound, GameSetupStep } from '@riftbound/shared'
+import {
+  Card, CardId, CardState, DeckList, GameMode, GameMatchFormat, GameDeckFormat, GameRound, GameSetupStep,
+  CardVisibleTo
+} from '@riftbound/shared'
 import type { PlayerId, PlayerState } from '@riftbound/shared'
 import { db } from '../config/firebase'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -212,7 +215,7 @@ export class GameRepository {
     const cards: Record<CardId, CardState> = {}
     let order = 0
 
-    function addCard(card: Card, ownerId: PlayerId, zoneId: CardState['zoneId']): void {
+    function addCard(card: Card, ownerId: PlayerId, zoneId: CardState['zoneId'], visibility: CardVisibleTo = 'NOBODY'): void {
       cards[card.id] = {
         cardId: card.id,
         baseCardId: card.baseCardId,
@@ -221,7 +224,14 @@ export class GameRepository {
         controllerId: ownerId,
         zoneId,
         order: order++,
-        state: { exhausted: false, counters: null, damages: null, buffs: null, visibleTo: 'ALL', groupTo: [] },
+        state: {
+          exhausted: false,
+          counters: null,
+          damages: null,
+          buffs: null,
+          visibleTo: visibility,
+          groupTo: []
+        },
         isToken: false,
       }
     }
@@ -249,11 +259,11 @@ export class GameRepository {
       update[`players.${uid}.mulliganCount`] = 0
       update[`players.${uid}.mulliganDone`] = true
 
-      if (legendCard) addCard(legendCard, uid, 'legend')
-      if (deck.champion) addCard(deck.champion, uid, 'champion')
+      if (legendCard) addCard(legendCard, uid, 'legend', "ALL")
+      if (deck.champion) addCard(deck.champion, uid, 'champion', 'ALL')
       for (const c of deck.mainDeck) addCard(c, uid, 'main_deck')
       for (const c of deck.runes) addCard(c, uid, 'runes_deck')
-      if (bf) addCard(bf, uid, 'battlefield')
+      if (bf) addCard(bf, uid, 'battlefield', 'ALL')
     }
 
     update['cards'] = cards

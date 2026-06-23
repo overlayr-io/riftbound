@@ -7,7 +7,8 @@ import {useViewport} from "@/composables/useViewport.ts";
 import ZoneView from "@/components/game/ZoneView.vue";
 import type {Rect} from "@/types/card.type.ts";
 
-const { playerIds } = useGameStore()
+const store = useGameStore()
+const { playerIds } = store
 const { zones, layouts, playersZone } = useLayout([])
 const { width: vw, height: vh } = useViewport()
 
@@ -106,6 +107,7 @@ function bleedRect(rect: Rect): Rect {
               v-if="layouts.get(card.id)"
               :card="card"
               :layout="layouts.get(card.id)!"
+              :current-player-id="store.myUid ?? ''"
           />
         </template>
       </div>

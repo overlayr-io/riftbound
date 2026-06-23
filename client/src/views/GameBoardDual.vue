@@ -117,6 +117,7 @@ function bleedRect(rect: Rect): Rect {
               v-if="layouts.get(card.cardId)"
               :card="card"
               :layout="layouts.get(card.cardId)!"
+              :current-player-id="store.myUid ?? ''"
           />
         </template>
       </div>
