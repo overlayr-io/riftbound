@@ -1,4 +1,4 @@
-import type { Card, DeckList, GameMatchFormat, GameDeckFormat } from '@riftbound/shared'
+import type { Card, DeckList, GameMatchFormat, GameDeckFormat, GameRound } from '@riftbound/shared'
 import type { PlayerId } from '@riftbound/shared'
 import { GameRepository } from '../repositories/game.repository'
 import { LobbyRepository } from '../repositories/lobby.repository'
@@ -53,10 +53,12 @@ export class GameService {
     roundId: string,
     uid: PlayerId,
     legendCard: Card,
+    deckList: DeckList,
   ): Promise<void> {
     await this.gameRepo.updatePlayerState(gameId, roundId, uid, {
       hasSubmittedDeck: true,
       legendCard,
+      deckList,
     })
 
     const round = await this.gameRepo.getRound(gameId, roundId)
@@ -139,6 +141,8 @@ export class GameService {
     if (!round || round.setup !== 'choose_first_player') return
     if (round.diceWinnerId !== uid) throw Object.assign(new Error('NOT_DICE_WINNER'), { status: 403 })
     if (!round.players[chosenPlayerId]) throw Object.assign(new Error('INVALID_PLAYER'), { status: 400 })
+    await this.gameRepo.initializeCards(gameId, roundId)
+    await this.gameRepo.shuffleDecks(gameId, roundId)
     await this.gameRepo.chooseFirstPlayer(gameId, roundId, chosenPlayerId)
   }
 
@@ -164,6 +168,8 @@ export class GameService {
     const round = await this.gameRepo.getRound(gameId, roundId)
     if (!round || round.setup !== 'select_battlefield_discard') return
     if (!round.discardedBattlefieldId) throw Object.assign(new Error('NO_DISCARD_PENDING'), { status: 400 })
+    await this.gameRepo.initializeCards(gameId, roundId)
+    await this.gameRepo.shuffleDecks(gameId, roundId)
     await this.gameRepo.confirmDiscard(gameId, roundId)
   }
 

@@ -122,12 +122,13 @@ function onClick() {
   >
     <div class="card-inner" :style="innerStyle">
       <img
-        class="card-face card-front object-cover w-full h-full"
+        class="card-face card-front object-contain w-full h-full"
+        :class="{'card-battlefield': card.zoneId === 'battlefield'}"
         :src="card.description.imageUrl || cardBack"
         :alt="card.description.name"
       >
       <img
-        class="card-face card-back object-cover w-full h-full"
+        class="card-face card-back object-contain w-full h-full"
         :src="cardBack"
         alt="dos"
       >
@@ -180,11 +181,15 @@ function onClick() {
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   border-radius: 4px;
   box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+}
+
+.card-battlefield {
+  box-shadow: none
 }
 
 .card-back {

@@ -1,4 +1,5 @@
 import {Card, CardId} from "./card";
+import {DeckList} from "./card";
 
 export type PlayerId = string;
 export interface Player {
@@ -13,6 +14,7 @@ export interface PlayerState {
    * Below: setup phase only.
    */
   hasSubmittedDeck: boolean
+  deckList: DeckList | null
   legendCard: Card | null
   submittedBattlefield: CardId | null
   battlefieldCard: Card | null

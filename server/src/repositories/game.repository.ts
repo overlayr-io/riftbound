@@ -11,6 +11,7 @@ function makeInitialPlayerState(playerId: PlayerId): PlayerState {
     playerId,
     score: 0,
     hasSubmittedDeck: false,
+    deckList: null,
     legendCard: null,
     submittedBattlefield: null,
     battlefieldCard: null,
@@ -178,6 +179,80 @@ export class GameRepository {
       setup: 'mulligan' as GameSetupStep,
       updatedAt: FieldValue.serverTimestamp(),
     })
+  }
+
+  async initializeCards(gameId: string, roundId: string): Promise<void> {
+    const roundRef = this.col.doc(gameId).collection('rounds').doc(roundId)
+    const snap = await roundRef.get()
+    if (!snap.exists) throw Object.assign(new Error('ROUND_NOT_FOUND'), { status: 404 })
+    const data = snap.data()!
+    const players = data.players as Record<PlayerId, { deckList: DeckList; legendCard: Card | null; battlefieldCard: Card | null }>
+
+    const cards: Record<CardId, CardState> = {}
+    let order = 0
+
+    function addCard(card: Card, ownerId: PlayerId, zoneId: CardState['zoneId'], visibility: CardVisibleTo = 'NOBODY'): void {
+      cards[card.id] = {
+        cardId: card.id,
+        baseCardId: card.baseCardId,
+        description: { name: card.name, type: card.type, imageUrl: card.imageUrl },
+        ownerId,
+        controllerId: ownerId,
+        zoneId,
+        order: order++,
+        state: { exhausted: false, counters: null, damages: null, buffs: null, visibleTo: visibility, groupTo: [] },
+        isToken: false,
+      }
+    }
+
+    for (const [uid, player] of Object.entries(players)) {
+      const deck = player.deckList
+      if (!deck) throw Object.assign(new Error(`MISSING_DECK_FOR_${uid}`), { status: 400 })
+
+      if (player.legendCard) addCard(player.legendCard, uid, 'legend', 'ALL')
+      if (deck.champion) addCard(deck.champion, uid, 'champion', 'ALL')
+      if (player.battlefieldCard) addCard(player.battlefieldCard, uid, 'battlefield', 'ALL')
+      for (const c of deck.mainDeck) addCard(c, uid, 'main_deck')
+      for (const c of deck.runes) addCard(c, uid, 'runes_deck')
+    }
+
+    await roundRef.update({ cards, updatedAt: FieldValue.serverTimestamp() })
+  }
+
+  async shuffleDecks(gameId: string, roundId: string): Promise<void> {
+    const roundRef = this.col.doc(gameId).collection('rounds').doc(roundId)
+    const snap = await roundRef.get()
+    if (!snap.exists) return
+
+    const cards = snap.data()!.cards as Record<CardId, CardState>
+    const deckZones = new Set(['main_deck', 'runes_deck'])
+
+    // Group deck cards by owner × zone
+    const groups = new Map<string, CardId[]>()
+    for (const [cardId, card] of Object.entries(cards)) {
+      if (!deckZones.has(card.zoneId)) continue
+      const key = `${card.ownerId}::${card.zoneId}`
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(cardId)
+    }
+
+    const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() }
+
+    for (const ids of groups.values()) {
+      // Fisher-Yates × 3
+      for (let pass = 0; pass < 3; pass++) {
+        for (let i = ids.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1))
+          ;[ids[i], ids[j]] = [ids[j], ids[i]]
+        }
+      }
+      ids.forEach((cardId, idx) => {
+        update[`cards.${cardId}.order`] = idx
+        update[`cards.${cardId}.state.visibleTo`] = 'NOBODY'
+      })
+    }
+
+    await roundRef.update(update)
   }
 
   async resetTiedPlayers(

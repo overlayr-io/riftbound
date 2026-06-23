@@ -1,5 +1,5 @@
 import { auth } from '@/firebase'
-import type { Card, Lobby, LobbyPlayerState } from '@riftbound/shared'
+import type { Card, DeckList, Lobby, LobbyPlayerState } from '@riftbound/shared'
 import type { GameMode, GameDeckFormat, GameMatchFormat } from '@riftbound/shared'
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
@@ -117,8 +117,8 @@ export const gameApi = {
     return requestGame('POST', '/', { lobbyId })
   },
 
-  submitDeck(gameId: string, roundId: string, legendCard: Card): Promise<void> {
-    return requestGame('PATCH', `/${gameId}/rounds/${roundId}/deck`, { legendCard })
+  submitDeck(gameId: string, roundId: string, legendCard: Card, deckList: DeckList): Promise<void> {
+    return requestGame('PATCH', `/${gameId}/rounds/${roundId}/deck`, { legendCard, deckList })
   },
 
   selectBattlefield(gameId: string, roundId: string, card: Card): Promise<void> {

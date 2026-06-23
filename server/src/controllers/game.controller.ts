@@ -27,9 +27,10 @@ export async function submitDeck(req: Request, res: Response, next: NextFunction
     const uid = req.user!.uid
     const gameId = param(req.params.gameId)
     const roundId = param(req.params.roundId)
-    const { legendCard } = req.body
+    const { legendCard, deckList } = req.body
     if (!legendCard) { res.status(400).json({ error: 'Missing legendCard' }); return }
-    await gameService.submitDeck(gameId, roundId, uid, legendCard)
+    if (!deckList) { res.status(400).json({ error: 'Missing deckList' }); return }
+    await gameService.submitDeck(gameId, roundId, uid, legendCard, deckList)
     res.status(204).send()
   } catch (err) { next(err) }
 }

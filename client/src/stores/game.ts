@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { doc, onSnapshot, updateDoc, serverTimestamp, type Unsubscribe } from 'firebase/firestore'
-import type { Card, DeckList, GameMode, GameMatchFormat, GameDeckFormat, GameRound, ZoneId } from '@riftbound/shared'
+import type { Card, CardVisibleTo, DeckList, GameMode, GameMatchFormat, GameDeckFormat, GameRound, ZoneId } from '@riftbound/shared'
 import type { PlayerId } from '@riftbound/shared'
 import { firestore } from '@/firebase'
 import { useAuthStore } from './auth'
@@ -167,7 +167,7 @@ export const useGameStore = defineStore('game', () => {
       const deck = await parser.parse(deckText)
       myDeck.value = deck
       if (gameId.value && currentRoundId.value && deck.legend) {
-        await gameApi.submitDeck(gameId.value, currentRoundId.value, deck.legend)
+        await gameApi.submitDeck(gameId.value, currentRoundId.value, deck.legend, deck)
       }
     } catch {
       importError.value = 'Erreur lors de l\'import du deck.'
@@ -225,6 +225,19 @@ export const useGameStore = defineStore('game', () => {
     return doc(firestore, 'games', gId, 'rounds', rId)
   }
 
+  const DECK_ZONES = new Set<ZoneId>(['main_deck', 'runes_deck'])
+
+  function resolveVisibility(cardId: string, toZoneId: ZoneId): CardVisibleTo | null {
+    const card = currentRound.value?.cards[cardId]
+    if (!card) return null
+    if (DECK_ZONES.has(toZoneId)) return 'NOBODY'
+    if (toZoneId === 'hand') {
+      // Don't reveal a card that was explicitly hidden by the player
+      return card.state.visibleTo === 'NOBODY' && !DECK_ZONES.has(card.zoneId) ? 'NOBODY' : 'SELF'
+    }
+    return null
+  }
+
   function moveCard(cardId: string, toZoneId: ZoneId) {
     const round = currentRound.value
     if (!round?.cards[cardId]) return
@@ -233,13 +246,19 @@ export const useGameStore = defineStore('game', () => {
 
     const targetCards = Object.values(round.cards).filter(c => c.zoneId === toZoneId)
     const newOrder = targetCards.length > 0 ? Math.max(...targetCards.map(c => c.order)) + 1 : 0
+    const newVisibility = resolveVisibility(cardId, toZoneId)
 
-    // Optimistic update → CSS transition fires immediately
-    round.cards[cardId] = { ...round.cards[cardId], zoneId: toZoneId, order: newOrder }
+    round.cards[cardId] = {
+      ...round.cards[cardId],
+      zoneId: toZoneId,
+      order: newOrder,
+      ...(newVisibility ? { state: { ...round.cards[cardId].state, visibleTo: newVisibility } } : {}),
+    }
 
     updateDoc(ref, {
       [`cards.${cardId}.zoneId`]: toZoneId,
       [`cards.${cardId}.order`]: newOrder,
+      ...(newVisibility ? { [`cards.${cardId}.state.visibleTo`]: newVisibility } : {}),
       _updatedBy: sessionId,
       updatedAt: serverTimestamp(),
     }).catch(console.error)
