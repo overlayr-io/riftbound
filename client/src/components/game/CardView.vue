@@ -3,6 +3,7 @@ import { computed, inject, ref } from 'vue'
 import type { CardState } from '@riftbound/shared'
 import type { CardLayout } from '@/types/card.type'
 import { DRAG_KEY, GAME_ACTIONS_KEY } from '@/composables/useDrag'
+import { useBoardShortcuts } from '@/composables/useBoardShortcuts'
 import cardBack from '@/assets/img/card_back.png'
 import runeIcon from '@/assets/img/rune_icon.png'
 import CardContextMenu from '@/components/game/CardContextMenu.vue'
@@ -15,6 +16,7 @@ const props = defineProps<{
 
 const drag = inject(DRAG_KEY)
 const actions = inject(GAME_ACTIONS_KEY)
+const { activeKey, handleCardClick } = useBoardShortcuts()
 
 // ── Visibility ──────────────────────────────────────────────────────────────
 
@@ -84,6 +86,10 @@ const style = computed(() => {
     width: L.w + 'px',
     height: L.h + 'px',
     zIndex: L.z,
+    cursor: isOwned.value && activeKey.value ? 'crosshair' : undefined,
+    filter: isOwned.value && activeKey.value && isHovered.value
+      ? 'drop-shadow(0 0 10px rgba(192, 57, 43, 0.6))'
+      : undefined,
   }
 })
 
@@ -100,6 +106,14 @@ function toggleExhausted() {
 function onPointerDown(e: PointerEvent) {
   if (!isOwned.value) return
   if (e.button !== 0) return
+
+  if (activeKey.value) {
+    e.preventDefault()
+    e.stopPropagation()
+    handleCardClick(props.card)
+    return
+  }
+
   if (NON_DRAGGABLE_ZONES.has(props.card.zoneId)) return
   drag?.onPointerDown(e, props.card.cardId, props.card.ownerId, props.layout, toggleExhausted)
 }

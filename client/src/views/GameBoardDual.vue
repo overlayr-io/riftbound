@@ -7,11 +7,25 @@ import { useGameStore } from '@/stores/game'
 import { useLayout, SEPARATOR } from '@/composables/useLayout'
 import { useViewport } from '@/composables/useViewport'
 import { useDrag, DRAG_KEY, GAME_ACTIONS_KEY } from '@/composables/useDrag'
+import { useBoardShortcuts } from '@/composables/useBoardShortcuts'
 import type { Rect } from '@/types/card.type'
 import type { CardState, GameAction, ZoneId } from '@riftbound/shared'
 
 const store = useGameStore()
 const { width: vw, height: vh } = useViewport()
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+
+const shortcuts = useBoardShortcuts()
+
+shortcuts.define({
+  key: 'd',
+  hint: 'Choisi la carte à défausser',
+  cardTarget: 'single',
+  onSelect: (card) => {
+    store.applyAction({ type: 'DISCARD_CARD', playerId: card.controllerId, cardId: card.cardId, fromZoneId: card.zoneId })
+  },
+})
 
 // ── Cards ─────────────────────────────────────────────────────────────────────
 

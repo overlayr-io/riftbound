@@ -5,9 +5,23 @@ import {useGameStore} from "@/stores/game.ts";
 import {useLayout, SEPARATOR} from "@/composables/useLayout.ts";
 import {useViewport} from "@/composables/useViewport.ts";
 import ZoneView from "@/components/game/ZoneView.vue";
+import { useBoardShortcuts } from '@/composables/useBoardShortcuts'
 import type {Rect} from "@/types/card.type.ts";
 
 const store = useGameStore()
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+
+const shortcuts = useBoardShortcuts()
+
+shortcuts.define({
+  key: 'd',
+  hint: 'Choisi la carte à défausser',
+  cardTarget: 'single',
+  onSelect: (card) => {
+    store.applyAction({ type: 'DISCARD_CARD', playerId: card.controllerId, cardId: card.cardId, fromZoneId: card.zoneId })
+  },
+})
 const { playerIds } = store
 const { zones, layouts, playersZone } = useLayout([])
 const { width: vw, height: vh } = useViewport()
