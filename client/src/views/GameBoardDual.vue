@@ -7,20 +7,75 @@ import {useLayout, SEPARATOR} from "@/composables/useLayout.ts";
 import {useViewport} from "@/composables/useViewport.ts";
 import ZoneView from "@/components/game/ZoneView.vue";
 import type {Rect} from "@/types/card.type.ts";
+import {computed, onMounted, ref} from "vue";
+import type {Card, CardState, DeckList, ZoneId} from "@riftbound/shared";
+import {DeckParser} from "@/utils/deckParser.ts";
 
-const { playerIds } = useGameStore()
-const { zones, layouts, playersZone } = useLayout([])
+const store = useGameStore()
 const { width: vw, height: vh } = useViewport()
 
-// ── Player colors (random, stable for the session) ────────────────────────
+// ── Dev mode: import default deck on mount ────────────────────────────────────
+
+const DEV_DECK = "Legend:\n1 Kha'Zix, Voidreaver\n\nChampion:\n1 Kha'Zix, Evolving Hunter\n\nMainDeck:\n3 Grim Resolve\n3 Irresistible Faefolk\n3 Void Assault\n\nBattlefields:\n1 Monastery of Hirana\n1 The Arena's Greatest\n1 Star Spring\n\nRunes:\n7 Body Rune\n5 Chaos Rune"
+
+const devCards = ref<readonly CardState[]>([])
+
+function deckToCardStates(deck: DeckList, ownerId: string): CardState[] {
+  const cards: CardState[] = []
+  let order = 0
+
+  function fromCard(c: Card, zoneId: ZoneId): CardState {
+    return {
+      cardId: c.id,
+      baseCardId: c.baseCardId,
+      description: { name: c.name, type: c.type, imageUrl: c.imageUrl },
+      ownerId,
+      controllerId: ownerId,
+      zoneId,
+      order: order++,
+      state: { exhausted: false, counters: null, damages: null, buffs: null, visibleTo: 'ALL', groupTo: [] },
+      isToken: false,
+    }
+  }
+
+  if (deck.legend)   cards.push(fromCard(deck.legend,   'legend'))
+  if (deck.champion) cards.push(fromCard(deck.champion, 'champion'))
+  for (const c of deck.mainDeck) cards.push(fromCard(c, 'main_deck'))
+  for (const c of deck.runes)    cards.push(fromCard(c, 'runes_deck'))
+  for (const c of deck.battlefields) cards.push(fromCard(c, 'banish'))
+
+  return cards
+}
+
+if (import.meta.env.DEV) {
+  onMounted(async () => {
+    if (Object.keys(store.currentRound?.cards ?? {}).length > 0) return
+    const deck = await new DeckParser().parse(DEV_DECK)
+    devCards.value = deckToCardStates(deck, store.myUid ?? 'dev_local')
+  })
+}
+
+// ── Cards ─────────────────────────────────────────────────────────────────────
+
+const allCards = computed<readonly CardState[]>(() => {
+  const storeCards = Object.values(store.currentRound?.cards ?? {})
+  if (storeCards.length > 0) return storeCards
+  if (import.meta.env.DEV) return devCards.value
+  return []
+})
+
+const { zones, layouts, playersZone } = useLayout(allCards)
+
+// ── Player colors ─────────────────────────────────────────────────────────────
+
 const PALETTE = ['#4fc3f7', '#ef5350', '#66bb6a', '#ffa726']
 const shuffled = [...PALETTE].sort(() => Math.random() - 0.5)
 const playerColors: Record<string, string> = Object.fromEntries(
-  playerIds.map((id: string, i: number) => [id, shuffled[i % shuffled.length]])
+  store.playerIds.map((id: string, i: number) => [id, shuffled[i % shuffled.length]])
 )
 
 function playerIdFromKey(key: string): string | null {
-  for (const id of playerIds) {
+  for (const id of store.playerIds) {
     if (key.startsWith(id + '_') || key.startsWith(id + SEPARATOR)) return id
   }
   return null
@@ -102,11 +157,11 @@ function bleedRect(rect: Rect): Rect {
 
       <!-- Cards -->
       <div class="cards-layer">
-        <template v-for="(card, i) in []" :key="i">
+        <template v-for="card in allCards" :key="card.cardId">
           <CardView
-              v-if="layouts.get(card.id)"
+              v-if="layouts.get(card.cardId)"
               :card="card"
-              :layout="layouts.get(card.id)!"
+              :layout="layouts.get(card.cardId)!"
           />
         </template>
       </div>
