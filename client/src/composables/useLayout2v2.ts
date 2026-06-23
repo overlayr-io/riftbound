@@ -1,0 +1,235 @@
+import {CardState, PlayerZoneId, ZoneId} from "@riftbound/shared";
+import {computed, toValue} from "vue";
+import {BF_CARD_SCALE, DEFAULT_CARD_RATIO, GAP, INSIDE_MARGIN, OUTSIDE_MARGIN, useCardSize} from "@/composables/useCardSize.ts";
+import {useViewport} from "@/composables/useViewport.ts";
+import {CardLayout, Rect} from "@/types/card.type.ts";
+import {useGameStore} from "@/stores/game.ts";
+
+const SEPARATOR = ':'
+
+export function useLayout2v2(cards: readonly CardState[]) {
+  const { playerIds, opponents, myUid } = useGameStore()
+  const { width: W, height: H } = useViewport()
+  const { cardW, cardH } = useCardSize()
+
+  const zones = computed<Record<string, Rect>>(() => {
+    const LEFT_X = OUTSIDE_MARGIN
+
+    const cardSlot = {
+      w: Math.round(cardH.value * DEFAULT_CARD_RATIO) + INSIDE_MARGIN * 2,
+      h: cardH.value + INSIDE_MARGIN * 2,
+    }
+
+    const yp2h = -cardSlot.h * 0.20
+    const yp2z =  cardSlot.h * 0.80 + GAP
+    const ybf  =  cardSlot.h * 1.80 + GAP * 2
+    const bfH  =  H.value - 3.60 * cardSlot.h - 4 * GAP
+
+    const STACK    = { w: cardW.value * 3 }
+    const deckSlot = { w: Math.round(cardSlot.w * 0.90), h: cardSlot.h }
+    const bfCardH  = cardH.value * BF_CARD_SCALE
+    const bfCardW  = cardW.value * BF_CARD_SCALE
+
+    const local = myUid
+    const result: Record<string, Rect> = {}
+
+    const emitBF = (prefix: string, x: number, w: number, ownerAtBottom: boolean) => {
+      result[`${prefix}${SEPARATOR}battlefield`] = { x, y: ybf, w, h: bfH }
+      result[`${prefix}_battlefield`] = {
+        x: x + (w - bfCardH) / 2,
+        y: ybf + (bfH - bfCardW) / 2,
+        w: bfCardH,
+        h: bfCardW,
+      }
+      result[`${prefix}${SEPARATOR}battlefield_owner`] = {
+        x: x + GAP,
+        y: ownerAtBottom ? ybf + bfH - cardSlot.h - INSIDE_MARGIN : ybf + INSIDE_MARGIN,
+        w: w - 2 * GAP,
+        h: cardSlot.h,
+      }
+      result[`${prefix}${SEPARATOR}battlefield_opponent`] = {
+        x: x + GAP,
+        y: ownerAtBottom ? ybf + INSIDE_MARGIN : ybf + bfH - cardSlot.h - INSIDE_MARGIN,
+        w: w - 2 * GAP,
+        h: cardSlot.h,
+      }
+    }
+
+    const emitPlayerRows = (
+      playerId: string,
+      template: Record<PlayerZoneId, Rect>,
+      transform: (r: Rect) => Rect,
+    ) => {
+      for (const [k, v] of Object.entries(template)) {
+        result[`${playerId}_${k}`] = transform(v)
+      }
+    }
+
+    const teammate = playerIds.find(id => id !== local && !opponents.includes(id)) ?? playerIds[1]
+    const opp1 = opponents[0]
+    const opp2 = opponents[1]
+
+    // Side template uses landscape slots so they appear portrait after 90° rotation:
+    //   rotateLeft: screen_w = ht, screen_h = wt → portrait requires wt > ht → landscape template
+    const sideCardSlot = { w: cardSlot.h, h: cardSlot.w }
+    const sideDeckSlot = { w: cardSlot.h, h: deckSlot.w }
+    const SIDE_W       = sideCardSlot.h * 1.80 + GAP * 2
+    const CENTER_X     = LEFT_X + SIDE_W + GAP
+    const CENTER_RIGHT = W.value - OUTSIDE_MARGIN - SIDE_W - GAP
+    const CENTER_W     = CENTER_RIGHT - CENTER_X
+
+    const zoneRowFill2 = CENTER_W - 2 * cardSlot.w - 3 * GAP
+    const BASE2  = { w: zoneRowFill2 * 0.60, h: cardSlot.h }
+    const RUNES2 = { w: zoneRowFill2 * 0.40, h: cardSlot.h }
+    const HAND2  = { w: (CENTER_W - 4 * deckSlot.w - 4 * GAP) * 0.60, h: cardSlot.h }
+    const handX2 = CENTER_X + (CENTER_W - HAND2.w) / 2
+
+    const topCenter: Record<PlayerZoneId, Rect> = {
+      banish:      { x: CENTER_X,                                                   y: yp2h, ...deckSlot },
+      discard:     { x: CENTER_X + deckSlot.w + GAP,                                y: yp2h, ...deckSlot },
+      main_deck:   { x: CENTER_X + 2 * deckSlot.w + 2 * GAP,                        y: yp2h, ...deckSlot },
+      hand:        { x: handX2,                                                     y: yp2h, w: HAND2.w, h: HAND2.h },
+      runes_deck:  { x: CENTER_RIGHT - deckSlot.w,                                  y: yp2h, ...deckSlot },
+      legend:      { x: CENTER_X,                                                   y: yp2z, ...cardSlot },
+      champion:    { x: CENTER_X + cardSlot.w + GAP,                                y: yp2z, ...cardSlot },
+      base:        { x: CENTER_X + 2 * cardSlot.w + 2 * GAP,                        y: yp2z, w: BASE2.w,  h: BASE2.h  },
+      runes:       { x: CENTER_X + 2 * cardSlot.w + 2 * GAP + BASE2.w + GAP,        y: yp2z, w: RUNES2.w, h: RUNES2.h },
+      battlefield: { x: 0, y: 0, w: 0, h: 0 },
+    }
+
+    const mirrorCenter = ({ x, y, w: zw, h: zh }: Rect): Rect => ({
+      x: CENTER_RIGHT - (x - CENTER_X) - zw,
+      y: H.value - y - zh,
+      w: zw,
+      h: zh,
+    })
+
+    const sideScale  = CENTER_W > H.value ? H.value / CENTER_W : 1
+    const rowOffset  = (H.value - CENTER_W * sideScale) / 2
+
+    const rotateLeft = ({ x: xt, y: yt, w: wt, h: ht }: Rect): Rect => ({
+      x: LEFT_X + yt,
+      y: rowOffset + (xt - CENTER_X) * sideScale,
+      w: ht,
+      h: wt * sideScale,
+    })
+    const rotateRight = ({ x: xt, y: yt, w: wt, h: ht }: Rect): Rect => ({
+      x: W.value - OUTSIDE_MARGIN - yt - ht,
+      y: rowOffset + (xt - CENTER_X) * sideScale,
+      w: ht,
+      h: wt * sideScale,
+    })
+
+    const syp2h2 = -sideCardSlot.h * 0.20
+    const syp2z2 =  sideCardSlot.h * 0.80 + GAP
+    const sideZoneRowFill2 = CENTER_W - 2 * sideCardSlot.w - 3 * GAP
+    const SIDE_BASE2  = { w: sideZoneRowFill2 * 0.60, h: sideCardSlot.h }
+    const SIDE_RUNES2 = { w: sideZoneRowFill2 * 0.40, h: sideCardSlot.h }
+    const SIDE_HAND2  = { w: (CENTER_W - 4 * sideCardSlot.w - 4 * GAP) * 0.60, h: sideCardSlot.h }
+    const sideHandX2  = CENTER_X + (CENTER_W - SIDE_HAND2.w) / 2
+
+    const sideCenter: Record<PlayerZoneId, Rect> = {
+      banish:      { x: CENTER_X,                                                          y: syp2h2, ...sideDeckSlot },
+      discard:     { x: CENTER_X + sideCardSlot.w + GAP,                                   y: syp2h2, ...sideDeckSlot },
+      main_deck:   { x: CENTER_X + 2 * sideCardSlot.w + 2 * GAP,                           y: syp2h2, ...sideDeckSlot },
+      hand:        { x: sideHandX2,                                                        y: syp2h2, w: SIDE_HAND2.w, h: sideCardSlot.h },
+      runes_deck:  { x: CENTER_RIGHT - sideCardSlot.w,                                     y: syp2h2, ...sideDeckSlot },
+      legend:      { x: CENTER_X,                                                          y: syp2z2, ...sideCardSlot },
+      champion:    { x: CENTER_X + sideCardSlot.w + GAP,                                   y: syp2z2, ...sideCardSlot },
+      base:        { x: CENTER_X + 2 * sideCardSlot.w + 2 * GAP,                           y: syp2z2, w: SIDE_BASE2.w,  h: SIDE_BASE2.h },
+      runes:       { x: CENTER_X + 2 * sideCardSlot.w + 2 * GAP + SIDE_BASE2.w + GAP,      y: syp2z2, w: SIDE_RUNES2.w, h: SIDE_RUNES2.h },
+      battlefield: { x: 0, y: 0, w: 0, h: 0 },
+    }
+
+    emitPlayerRows(teammate,     topCenter,  v => v)
+    emitPlayerRows(local ?? '', topCenter,  mirrorCenter)
+    emitPlayerRows(opp1,        sideCenter, rotateLeft)
+    emitPlayerRows(opp2,        sideCenter, rotateRight)
+
+    // 2v2 always has exactly 3 battlefields: local | baron_nashor | teammate
+    const bfW3 = (CENTER_W - 3 * GAP - STACK.w) / 3
+    emitBF(local ?? '',    CENTER_X,                    bfW3, true)
+    emitBF('baron_nashor', CENTER_X + bfW3 + GAP,       bfW3, true)
+    emitBF(teammate,       CENTER_X + 2 * (bfW3 + GAP), bfW3, false)
+
+    result['stack'] = { x: CENTER_RIGHT - STACK.w, y: ybf, w: STACK.w, h: bfH }
+
+    return result
+  })
+
+  const layouts = computed<Map<ZoneId, CardLayout>>(() => {
+    const out = new Map<ZoneId, CardLayout>()
+
+    const groups = new Map<string, CardState[]>()
+    for (const c of cards) {
+      const key = `${c.ownerId}${SEPARATOR}${c.zoneId}`
+      let list = groups.get(key)
+      if (!list) groups.set(key, (list = []))
+      list.push(c)
+    }
+
+    for (const [key, list] of groups) {
+      const zone = key.slice(key.indexOf(SEPARATOR) + 1) as ZoneId
+      const rect = zones.value[key] ?? zones.value[zone]
+      if (!rect) continue
+
+      list.sort((a, b) => a.order - b.order)
+
+      switch (zone) {
+        case 'hand':
+          break
+        case 'main_deck':
+        case 'runes_deck':
+        case 'discard':
+        case 'banish':
+          break
+        case 'legend':
+        case 'champion':
+          break
+        case 'battlefield':
+          break
+        case 'battlefield_opponent':
+        case 'battlefield_owner':
+          break
+        case 'runes':
+          break
+        case 'base':
+          break
+        case 'stack':
+          break
+      }
+    }
+
+    return out
+  })
+
+  const playersZone = computed<Record<string, Rect>>(() => {
+    const w = toValue(W)
+    const h = toValue(H)
+    const local = myUid
+
+    const LEFT_X       = OUTSIDE_MARGIN
+    // Must match the zones computed: sideCardSlot.h = cardSlot.w = cardW + INSIDE_MARGIN*2
+    const cardSlotW    = cardW.value + INSIDE_MARGIN * 2
+    const SIDE_W       = cardSlotW * 1.80 + GAP * 2
+    const CENTER_X     = LEFT_X + SIDE_W + GAP
+    const CENTER_RIGHT = w - OUTSIDE_MARGIN - SIDE_W - GAP
+    const CENTER_W     = CENTER_RIGHT - CENTER_X
+    const teammate     = playerIds.find(id => id !== local && !opponents.includes(id)) ?? playerIds[1]
+    const opp1         = opponents[0]
+    const opp2         = opponents[1]
+
+    return {
+      [`${local}${SEPARATOR}zone`]:    { x: CENTER_X,           y: h / 2, w: CENTER_W, h: h / 2 },
+      [`${teammate}${SEPARATOR}zone`]: { x: CENTER_X,           y: 0,     w: CENTER_W, h: h / 2 },
+      [`${opp1}${SEPARATOR}zone`]:     { x: LEFT_X,             y: 0,     w: SIDE_W,   h },
+      [`${opp2}${SEPARATOR}zone`]:     { x: CENTER_RIGHT + GAP, y: 0,     w: SIDE_W,   h },
+    }
+  })
+
+  return {
+    zones,
+    layouts,
+    playersZone,
+  }
+}

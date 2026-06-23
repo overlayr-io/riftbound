@@ -3,13 +3,52 @@
 import GameSidebarDual from "@/components/game/GameSidebarDual.vue";
 import CardView from "@/components/game/CardView.vue";
 import {useGameStore} from "@/stores/game.ts";
-import {useLayout} from "@/composables/useLayout.ts";
+import {useLayout, SEPARATOR} from "@/composables/useLayout.ts";
+import {useViewport} from "@/composables/useViewport.ts";
 import ZoneView from "@/components/game/ZoneView.vue";
+import type {Rect} from "@/types/card.type.ts";
 
-
-// get cards from game store
-const { } = useGameStore()
+const { playerIds } = useGameStore()
 const { zones, layouts, playersZone } = useLayout([])
+const { width: vw, height: vh } = useViewport()
+
+// ── Player colors (random, stable for the session) ────────────────────────
+const PALETTE = ['#4fc3f7', '#ef5350', '#66bb6a', '#ffa726']
+const shuffled = [...PALETTE].sort(() => Math.random() - 0.5)
+const playerColors: Record<string, string> = Object.fromEntries(
+  playerIds.map((id: string, i: number) => [id, shuffled[i % shuffled.length]])
+)
+
+function playerIdFromKey(key: string): string | null {
+  for (const id of playerIds) {
+    if (key.startsWith(id + '_') || key.startsWith(id + SEPARATOR)) return id
+  }
+  return null
+}
+
+function colorOfZoneKey(key: string): string | undefined {
+  const pid = playerIdFromKey(key)
+  return pid ? playerColors[pid] : undefined
+}
+
+function colorOfPlayerId(pid: string): string {
+  return playerColors[pid] ?? '#ffffff'
+}
+
+function bfKey(zoneKey: string): string {
+  const pid = playerIdFromKey(zoneKey) ?? zoneKey.split(SEPARATOR)[0]
+  return pid + SEPARATOR + 'battlefield'
+}
+
+const BLEED = 8
+function bleedRect(rect: Rect): Rect {
+  let { x, y, w, h } = rect
+  if (x < 50)                   { x -= BLEED; w += BLEED }
+  if (x + w > vw.value - 50)   { w += BLEED }
+  if (y < 10)                   { y -= BLEED; h += BLEED }
+  if (y + h > vh.value - 10)   { h += BLEED }
+  return { x, y, w, h }
+}
 
 </script>
 
@@ -19,33 +58,50 @@ const { zones, layouts, playersZone } = useLayout([])
 
     <div class="flex-1">
 
-      <!-- Players zone     -->
+      <!-- Players zone -->
       <div class="players-layer">
-        <div
-            v-for="key in Object.keys(playersZone)"
-            :key="key"
-            class="player-zone"
-            :style="{
-          left:   playersZone[key].x + 'px',
-          top:    playersZone[key].y + 'px',
-          width:  playersZone[key].w + 'px',
-          height: playersZone[key].h + 'px',
-        }"
-        />
+        <template v-for="(rect, key) in playersZone" :key="key">
+
+          <!-- Territory -->
+          <div
+              class="player-zone"
+              :style="{
+                left:   bleedRect(rect).x + 'px',
+                top:    bleedRect(rect).y + 'px',
+                width:  bleedRect(rect).w + 'px',
+                height: bleedRect(rect).h + 'px',
+                '--player-color': colorOfPlayerId(playerIdFromKey(String(key)) ?? ''),
+              }"
+          />
+
+          <!-- Battlefield -->
+          <div
+              v-if="zones[bfKey(String(key))]"
+              class="player-battlefield"
+              :style="{
+                left:   zones[bfKey(String(key))].x + 'px',
+                top:    zones[bfKey(String(key))].y + 'px',
+                width:  zones[bfKey(String(key))].w + 'px',
+                height: zones[bfKey(String(key))].h + 'px',
+                '--player-color': colorOfPlayerId(playerIdFromKey(String(key)) ?? ''),
+              }"
+          />
+        </template>
       </div>
 
-      <!-- Zones zone     -->
-      <div class="zones-layer" style="z-index:2">
+      <!-- Zones -->
+      <div class="zones-layer">
         <ZoneView
-            v-for="key in Object.keys(zones)"
+            v-for="(rect, key) in zones"
             :key="key"
-            :id="key"
-            :rect="zones[key]"
+            :id="String(key)"
+            :rect="rect"
+            :color="colorOfZoneKey(String(key))"
         />
       </div>
 
-      <!-- Cards zone     -->
-      <div class="cards-layer" style="z-index:3">
+      <!-- Cards -->
+      <div class="cards-layer">
         <template v-for="(card, i) in []" :key="i">
           <CardView
               v-if="layouts.get(card.id)"
@@ -53,7 +109,6 @@ const { zones, layouts, playersZone } = useLayout([])
               :layout="layouts.get(card.id)!"
           />
         </template>
-
       </div>
     </div>
   </div>
@@ -65,7 +120,23 @@ const { zones, layouts, playersZone } = useLayout([])
   z-index: 1;
   inset: 0;
   pointer-events: none;
+  overflow: hidden;
 }
+
+.player-zone {
+  position: fixed;
+  border: 1px solid color-mix(in srgb, var(--player-color) 30%, transparent);
+  background: color-mix(in srgb, var(--player-color) 3%, transparent);
+  border-radius: 6px;
+}
+
+.player-battlefield {
+  position: fixed;
+  border: 1px dashed color-mix(in srgb, var(--player-color) 40%, transparent);
+  background: color-mix(in srgb, var(--player-color) 6%, transparent);
+  border-radius: 4px;
+}
+
 .zones-layer {
   position: fixed;
   z-index: 2;
