@@ -610,6 +610,20 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  function setScore(playerId: PlayerId, score: number) {
+    const round = currentRound.value
+    const ref = roundRef()
+    if (!round || !ref || !round.players[playerId]) return
+
+    round.players[playerId] = { ...round.players[playerId], score }
+
+    updateDoc(ref, {
+      [`players.${playerId}.score`]: score,
+      _updatedBy: sessionId,
+      updatedAt: serverTimestamp(),
+    }).catch(console.error)
+  }
+
   return {
     gameId,
     mode,
@@ -646,5 +660,6 @@ export const useGameStore = defineStore('game', () => {
     submitMulligan,
     devSkipSetup,
     applyAction,
+    setScore,
   }
 })

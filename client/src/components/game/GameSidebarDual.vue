@@ -4,6 +4,7 @@ import { useGameStore } from '@/stores/game'
 import { useViewport } from '@/composables/useViewport.ts'
 import { useGameEmote } from '@/composables/useGameEmote'
 import { useGameChat } from '@/composables/useGameChat'
+import { usePlayerScore } from '@/composables/usePlayerScore'
 import GameChatPanel from './GameChatPanel.vue'
 import GameQuitConfirm from './GameQuitConfirm.vue'
 import GameEmotePanel from './GameEmotePanel.vue'
@@ -19,18 +20,8 @@ const isMyTurn = computed(() => {
 
 const turnCount = computed(() => gameStore.currentRound?.currentTurn?.turn ?? 0)
 
-// ── Local scores (client-side only) ──────────────────────────────────────────
-const myScore = ref(0)
-const oppScore = ref(0)
-
-function changeMyScore(delta: number) {
-  myScore.value = Math.max(0, myScore.value + delta)
-  const uid = gameStore.myUid
-  if (uid) {
-    const sign = delta > 0 ? `+${delta}` : `${delta}`
-    gameStore.writeLog(`${gameStore.actorName(uid)} : score ${sign} → ${myScore.value} pt(s)`, uid)
-  }
-}
+// ── Scores (realtime Firestore + debounce 2s) ─────────────────────────────────
+const { myScore, oppScore, changeMyScore } = usePlayerScore()
 
 // ── Panels ────────────────────────────────────────────────────────────────────
 const isChatOpen = ref(false)
