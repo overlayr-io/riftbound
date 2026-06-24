@@ -1,5 +1,5 @@
 import { auth } from '@/firebase'
-import type { Card, DeckList, Lobby, LobbyPlayerState } from '@riftbound/shared'
+import type { Card, DeckList, Lobby, LobbyPlayerState, GameLog } from '@riftbound/shared'
 import type { GameMode, GameDeckFormat, GameMatchFormat } from '@riftbound/shared'
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
@@ -150,5 +150,13 @@ export const gameApi = {
 
   devSkipSetup(gameId: string, roundId: string, playersDecks: Record<string, unknown>): Promise<void> {
     return requestGame('POST', `/${gameId}/rounds/${roundId}/dev-skip`, { playersDecks })
+  },
+
+  sendMessage(gameId: string, text: string): Promise<void> {
+    return requestGame('POST', `/${gameId}/messages`, { text })
+  },
+
+  getLogs(gameId: string): Promise<GameLog[]> {
+    return requestGame('GET', `/${gameId}/logs`)
   },
 }

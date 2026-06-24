@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { doc, onSnapshot, updateDoc, serverTimestamp, type Unsubscribe } from 'firebase/firestore'
+import { doc, addDoc, collection, onSnapshot, updateDoc, serverTimestamp, type Unsubscribe } from 'firebase/firestore'
 import type { Card, CardVisibleTo, DeckList, GameAction, GameMode, GameMatchFormat, GameDeckFormat, GameRound, ZoneId } from '@riftbound/shared'
 import type { PlayerId } from '@riftbound/shared'
 import { firestore } from '@/firebase'
@@ -250,6 +250,8 @@ export const useGameStore = defineStore('game', () => {
 
     // Pick the top card (highest order = last played)
     const card = stackCards.reduce((a, b) => a.order > b.order ? a : b)
+    const uid = myUid.value
+    if (uid) writeLog(`${actorName(uid)} a résolu ${card.description?.name ?? 'une carte'} depuis le stack`, uid)
 
     const discardCards = Object.values(round.cards).filter(c => c.zoneId === 'discard')
     const newOrder = Math.max(-1, ...discardCards.map(c => c.order)) + 1
@@ -278,6 +280,8 @@ export const useGameStore = defineStore('game', () => {
     if (!round?.cards[cardId]) return
     const ref = roundRef()
     if (!ref) return
+    const uid = myUid.value
+    if (uid) writeLog(`${actorName(uid)} a placé ${cardName(cardId)} ${position === 'top' ? 'au-dessus' : 'en-dessous'} de ${zoneFr(deckZone)}`, uid)
 
     const deckCards = Object.values(round.cards).filter(c => c.zoneId === deckZone)
     const newOrder = position === 'top'
@@ -368,11 +372,101 @@ export const useGameStore = defineStore('game', () => {
     }).catch(console.error)
   }
 
+  const ZONE_FR: Record<string, string> = {
+    hand: 'la main',
+    main_deck: 'le deck',
+    discard: 'la défausse',
+    banish: 'le bannissement',
+    runes_deck: 'le deck de runes',
+    runes: 'les runes actives',
+    legend: 'la zone légende',
+    champion: 'la zone champion',
+    base: 'la base',
+    battlefield: 'le champ de bataille',
+    battlefield_owner: 'le champ de bataille',
+    battlefield_opponent: 'le champ de bataille adverse',
+    stack: 'le stack',
+  }
+
+  function zoneFr(z: string) { return ZONE_FR[z] ?? z }
+
+  function cardName(cardId: string): string {
+    return currentRound.value?.cards[cardId]?.description?.name ?? 'une carte'
+  }
+
+  function actorName(actorId: string): string {
+    return playerNames.value[actorId]?.name ?? actorId.slice(0, 6)
+  }
+
+  function buildLogDescription(action: GameAction, actorId: string): string | null {
+    const who = actorName(actorId)
+    switch (action.type) {
+      case 'DRAW_CARD':
+        return `${who} a pioché une carte`
+      case 'CHANNEL_CARD':
+        return `${who} a canalisé ${cardName(action.cardId)} depuis le deck de runes`
+      case 'RECYCLE_RUNE':
+        return `${who} a recyclé ${cardName(action.cardId)} dans le deck de runes`
+      case 'PLAY_CARD':
+        return `${who} a joué ${cardName(action.cardId)} vers ${zoneFr(action.toZoneId)}`
+      case 'MOVE_CARD':
+        return `${who} a déplacé ${cardName(action.cardId)} de ${zoneFr(action.fromZoneId)} vers ${zoneFr(action.toZoneId)}`
+      case 'MOVE_TO_HAND':
+        return `${who} a renvoyé ${cardName(action.cardId)} en main`
+      case 'DISCARD_CARD':
+        return `${who} a défaussé ${cardName(action.cardId)}`
+      case 'BANISH_CARD':
+        return `${who} a banni ${cardName(action.cardId)}`
+      case 'HIDE_CARD':
+        return `${who} a retourné ${cardName(action.cardId)} face cachée`
+      case 'REVEAL_CARD':
+        return `${who} a révélé ${cardName(action.cardId)} à tous`
+      case 'REVEAL_CARD_FOR_SELF':
+        return `${who} a regardé ${cardName(action.cardId)}`
+      case 'TOGGLE_EXHAUSTED': {
+        const exhausted = currentRound.value?.cards[action.cardId]?.state.exhausted
+        return `${who} a ${exhausted ? 'réactivé' : 'épuisé'} ${cardName(action.cardId)}`
+      }
+      case 'GROUP_CARD':
+        return `${who} a attaché ${cardName(action.childId)} à ${cardName(action.parentId)}`
+      case 'UNGROUP_CARD':
+        return `${who} a détaché ${cardName(action.cardId)}`
+      case 'SET_COUNTERS':
+        return action.value !== null
+          ? `${who} a mis ${action.value} compteur(s) sur ${cardName(action.cardId)}`
+          : `${who} a retiré les compteurs de ${cardName(action.cardId)}`
+      case 'SET_DAMAGES':
+        return action.value !== null
+          ? `${who} a infligé ${action.value} dégât(s) à ${cardName(action.cardId)}`
+          : `${who} a soigné ${cardName(action.cardId)}`
+      case 'SET_BUFF':
+        return action.value !== null
+          ? `${who} a appliqué un buff de ${action.value} à ${cardName(action.cardId)}`
+          : `${who} a retiré le buff de ${cardName(action.cardId)}`
+      default:
+        return null
+    }
+  }
+
+  function writeLog(description: string, actorId: string | null = null) {
+    const gId = gameId.value
+    if (!gId) return
+    addDoc(collection(firestore, 'games', gId, 'logs'), {
+      playerId: actorId,
+      description,
+      createdAt: serverTimestamp(),
+    }).catch(() => {})
+  }
+
   function applyAction(action: GameAction) {
     const round = currentRound.value
     if (!round) return
     const ref = roundRef()
     if (!ref) return
+
+    const actorId = myUid.value ?? action.playerId ?? ''
+    const desc = buildLogDescription(action, actorId)
+    if (desc) writeLog(desc, actorId)
 
     switch (action.type) {
       case 'DRAW_CARD':
@@ -541,6 +635,8 @@ export const useGameStore = defineStore('game', () => {
     detach,
     sendToDeck,
     resolveStack,
+    writeLog,
+    actorName,
     importDeck,
     selectBattlefield,
     rollDice,

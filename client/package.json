@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@riftbound/shared": "*",
+    "dayjs": "^1.11.21",
     "firebase": "^11.0.0",
     "pinia": "^2.2.0",
     "vue": "^3.5.0",

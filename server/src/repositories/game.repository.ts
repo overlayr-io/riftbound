@@ -275,6 +275,13 @@ export class GameRepository {
     return (snap.data()?.mode as GameMode) ?? 'dual'
   }
 
+  async get(gameId: string): Promise<{ playerIds: PlayerId[]; playerNames: Record<PlayerId, { name: string; teamId: '1' | '2' | null }> } | null> {
+    const snap = await this.col.doc(gameId).get()
+    if (!snap.exists) return null
+    const d = snap.data()!
+    return { playerIds: d.playerIds ?? [], playerNames: d.playerNames ?? {} }
+  }
+
   async devSkipSetup(
     gameId: string,
     roundId: string,

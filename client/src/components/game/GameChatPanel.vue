@@ -1,40 +1,59 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
+import dayjs from 'dayjs'
 import { OUTSIDE_MARGIN, INSIDE_MARGIN, DEFAULT_CARD_RATIO, useCardSize } from '@/composables/useCardSize'
 import { useViewport } from '@/composables/useViewport'
+import { useGameChat } from '@/composables/useGameChat'
+import { useGameLogs } from '@/composables/useGameLogs'
 
-const props = defineProps<{ open: boolean; sidebarWidth: number }>()
-const emit = defineEmits<{ 'update:open': [value: boolean] }>()
+const props = defineProps<{
+  open: boolean
+  sidebarWidth: number
+  gameId: string | null
+  myUid: string | null
+}>()
+defineEmits<{ 'update:open': [value: boolean] }>()
 
 const { cardH } = useCardSize()
 const { SIDEBAR_WIDTH } = useViewport()
 
-// Reproduce the runes_deck zone position for the local (mirrored) player
 const chatLeft = computed(() => {
   const cardSlotW = Math.round(cardH.value * DEFAULT_CARD_RATIO) + INSIDE_MARGIN * 2
   const deckSlotW = Math.round(cardSlotW * 0.90)
   return SIDEBAR_WIDTH + OUTSIDE_MARGIN + deckSlotW
 })
 
+// ── Tabs ──────────────────────────────────────────────────────────────────────
 const activeTab = ref<'chat' | 'logs'>('chat')
+
+// ── Chat ──────────────────────────────────────────────────────────────────────
+const { messages, sending, send } = useGameChat(() => props.gameId)
 const inputText = ref('')
+const messagesEl = ref<HTMLElement | null>(null)
 
-// Placeholder data for design preview
-const messages = [
-  { id: 1, isMine: false, authorName: 'Adversaire', text: 'Bonne chance !', timestamp: new Date(Date.now() - 120000) },
-  { id: 2, isMine: true,  authorName: 'Moi',         text: 'Merci, à toi aussi.',  timestamp: new Date(Date.now() - 60000)  },
-  { id: 3, isMine: false, authorName: 'Adversaire', text: 'Tu joues quoi comme deck ?', timestamp: new Date(Date.now() - 30000) },
-]
+async function onSend() {
+  if (!inputText.value.trim() || sending.value) return
+  const ok = await send(inputText.value)
+  if (ok) inputText.value = ''
+}
 
-const logs = [
-  { id: 1, text: 'Adversaire a pioché une carte', timestamp: new Date(Date.now() - 90000) },
-  { id: 2, text: 'Tu as joué Rune de Feu', timestamp: new Date(Date.now() - 75000) },
-  { id: 3, text: 'Adversaire a défaussé 2 cartes', timestamp: new Date(Date.now() - 45000) },
-  { id: 4, text: 'Tour 3 — Ton tour', timestamp: new Date(Date.now() - 10000) },
-]
+// Auto-scroll to bottom on new messages
+watch(messages, async () => {
+  await nextTick()
+  if (messagesEl.value) messagesEl.value.scrollTop = messagesEl.value.scrollHeight
+}, { deep: true })
 
-function formatTime(date: Date): string {
-  return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+// ── Logs ──────────────────────────────────────────────────────────────────────
+const { logs, loading: logsLoading, fetchLogs } = useGameLogs(() => props.gameId)
+
+watch(activeTab, tab => {
+  if (tab === 'logs') fetchLogs()
+})
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function formatTime(date: Date | null | undefined): string {
+  if (!date) return ''
+  return dayjs(date).format('HH:mm')
 }
 </script>
 
@@ -43,6 +62,7 @@ function formatTime(date: Date): string {
     <Transition name="chat">
       <div v-if="props.open" class="chat-panel" :style="{ left: chatLeft + 'px' }">
 
+        <!-- Header with tabs -->
         <div class="chat-header">
           <div class="chat-tabs">
             <button
@@ -58,18 +78,19 @@ function formatTime(date: Date): string {
           </div>
         </div>
 
+        <!-- Chat tab -->
         <template v-if="activeTab === 'chat'">
-          <div class="chat-messages">
-            <div class="flex flex-col-reverse gap-1 p-2">
+          <div ref="messagesEl" class="chat-messages">
+            <div class="flex flex-col gap-1 p-2">
               <div
-                v-for="msg in [...messages].reverse()"
-                :key="msg.id"
+                v-for="msg in messages"
+                :key="msg.messageId"
                 class="chat-msg"
-                :class="msg.isMine ? 'chat-msg--mine' : 'chat-msg--theirs'"
+                :class="msg.playerId === props.myUid ? 'chat-msg--mine' : 'chat-msg--theirs'"
               >
-                <span v-if="!msg.isMine" class="chat-msg__author">{{ msg.authorName }}</span>
+                <span v-if="msg.playerId !== props.myUid" class="chat-msg__author">{{ msg.playerName }}</span>
                 <span class="chat-msg__text">{{ msg.text }}</span>
-                <span class="chat-msg__time">{{ formatTime(msg.timestamp) }}</span>
+                <span class="chat-msg__time">{{ formatTime(msg.sentAt) }}</span>
               </div>
               <div v-if="messages.length === 0" class="chat-empty">Aucun message</div>
             </div>
@@ -81,8 +102,10 @@ function formatTime(date: Date): string {
               class="chat-input"
               placeholder="Message..."
               maxlength="200"
+              :disabled="sending"
+              @keydown.enter.prevent="onSend"
             />
-            <button class="chat-send-btn">
+            <button class="chat-send-btn" :disabled="sending" @click="onSend">
               <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
               </svg>
@@ -90,12 +113,14 @@ function formatTime(date: Date): string {
           </div>
         </template>
 
+        <!-- Logs tab -->
         <template v-else>
           <div class="chat-messages">
-            <div class="flex flex-col gap-1 p-2">
-              <div v-for="log in logs" :key="log.id" class="log-entry">
-                <span class="log-entry__time">{{ formatTime(log.timestamp) }}</span>
-                <span class="log-entry__text">{{ log.text }}</span>
+            <div v-if="logsLoading" class="chat-empty">Chargement...</div>
+            <div v-else class="flex flex-col gap-1 p-2">
+              <div v-for="log in logs" :key="log.logId" class="log-entry">
+                <span class="log-entry__time">{{ formatTime(log.createdAt) }}</span>
+                <span class="log-entry__text">{{ log.description }}</span>
               </div>
               <div v-if="logs.length === 0" class="chat-empty">Aucun événement</div>
             </div>
@@ -133,10 +158,7 @@ function formatTime(date: Date): string {
   flex-shrink: 0;
 }
 
-.chat-tabs {
-  display: flex;
-  flex: 1;
-}
+.chat-tabs { display: flex; flex: 1; }
 
 .chat-tab {
   flex: 1;
@@ -150,13 +172,8 @@ function formatTime(date: Date): string {
   transition: color 0.15s, border-color 0.15s;
   cursor: pointer;
 }
-.chat-tab--active {
-  color: #C8AA6E;
-  border-bottom-color: #C8AA6E;
-}
-.chat-tab:not(.chat-tab--active):hover {
-  color: #6a8a90;
-}
+.chat-tab--active { color: #C8AA6E; border-bottom-color: #C8AA6E; }
+.chat-tab:not(.chat-tab--active):hover { color: #6a8a90; }
 
 .chat-messages {
   flex: 1;
@@ -227,11 +244,7 @@ function formatTime(date: Date): string {
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
-.log-entry__text {
-  font-size: 0.65rem;
-  color: #6a8a90;
-  line-height: 1.4;
-}
+.log-entry__text { font-size: 0.65rem; color: #6a8a90; line-height: 1.4; }
 
 .chat-input-row {
   display: flex;
@@ -253,10 +266,12 @@ function formatTime(date: Date): string {
 }
 .chat-input::placeholder { color: #2a4a50; }
 .chat-input:focus { border-color: rgba(200, 170, 110, 0.4); }
+.chat-input:disabled { opacity: 0.5; }
 
 .chat-send-btn {
   @apply w-7 h-7 flex items-center justify-center rounded text-[#8aabb0] hover:text-[#C8AA6E] hover:bg-[#1a3050] transition-all flex-shrink-0;
 }
+.chat-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .chat-enter-active, .chat-leave-active { transition: opacity 0.15s ease, transform 0.15s ease; }
 .chat-enter-from, .chat-leave-to { opacity: 0; transform: translateY(8px); }

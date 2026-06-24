@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useGameStore } from '@/stores/game'
 import { useViewport } from '@/composables/useViewport.ts'
+import { useGameEmote } from '@/composables/useGameEmote'
+import { useGameChat } from '@/composables/useGameChat'
 import GameChatPanel from './GameChatPanel.vue'
 import GameQuitConfirm from './GameQuitConfirm.vue'
+import GameEmotePanel from './GameEmotePanel.vue'
+import GameEmoteDisplay from './GameEmoteDisplay.vue'
 
 const { SIDEBAR_WIDTH } = useViewport()
 const gameStore = useGameStore()
@@ -21,16 +25,77 @@ const oppScore = ref(0)
 
 function changeMyScore(delta: number) {
   myScore.value = Math.max(0, myScore.value + delta)
+  const uid = gameStore.myUid
+  if (uid) {
+    const sign = delta > 0 ? `+${delta}` : `${delta}`
+    gameStore.writeLog(`${gameStore.actorName(uid)} : score ${sign} → ${myScore.value} pt(s)`, uid)
+  }
 }
 
 // ── Panels ────────────────────────────────────────────────────────────────────
 const isChatOpen = ref(false)
+const isEmoteOpen = ref(false)
 const showQuitConfirm = ref(false)
 
 function confirmLeave() {
   showQuitConfirm.value = false
   // TODO: leave room + router.push('/')
 }
+
+// ── Chat badge (unread count) ─────────────────────────────────────────────────
+const { messages: chatMessages } = useGameChat(() => gameStore.gameId)
+const lastSeenCount = ref(0)
+
+watch(isChatOpen, open => {
+  if (open) lastSeenCount.value = chatMessages.value.length
+})
+
+const unreadCount = computed(() =>
+  isChatOpen.value ? 0 : Math.max(0, chatMessages.value.length - lastSeenCount.value)
+)
+
+// ── Emotes (RTDB real-time) ───────────────────────────────────────────────────
+const myName = computed(() => {
+  const uid = gameStore.myUid
+  return uid ? (gameStore.playerNames[uid]?.name ?? 'Moi') : 'Moi'
+})
+
+const { latestEmote, sendEmote } = useGameEmote(
+  () => gameStore.gameId,
+  () => gameStore.myUid,
+  () => myName.value,
+)
+
+// Drive the display from the latest RTDB emote event
+const displayEmoteId = ref<string | null>(null)
+const displayEmoteAuthor = ref<string>('')
+let displayResetTimer: ReturnType<typeof setTimeout> | null = null
+
+watch(latestEmote, ev => {
+  if (!ev) return
+  if (displayResetTimer) clearTimeout(displayResetTimer)
+  // Reset first so the watcher in GameEmoteDisplay fires on same emoteId re-send
+  displayEmoteId.value = null
+  requestAnimationFrame(() => {
+    displayEmoteId.value = ev.emoteId
+    displayEmoteAuthor.value = ev.playerName
+    displayResetTimer = setTimeout(() => { displayEmoteId.value = null }, 3500)
+  })
+})
+
+function onEmoteSelect(id: string) {
+  sendEmote(id)
+}
+
+function onKey(e: KeyboardEvent) {
+  if (e.repeat) return
+  const tag = (e.target as HTMLElement).tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return
+  if (e.key.toLowerCase() === 'e') isEmoteOpen.value = !isEmoteOpen.value
+}
+
+onMounted(() => document.addEventListener('keydown', onKey))
+onUnmounted(() => document.removeEventListener('keydown', onKey))
 </script>
 
 <template>
@@ -94,7 +159,7 @@ function confirmLeave() {
 
       <!-- Chat -->
       <button
-        class="sidebar-btn"
+        class="sidebar-btn chat-btn"
         :class="{ 'sidebar-btn--active': isChatOpen }"
         title="Chat (C)"
         @click="isChatOpen = !isChatOpen"
@@ -103,10 +168,11 @@ function confirmLeave() {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
             d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.77 9.77 0 01-4.41-1.045L3 21l1.356-4.122C3.499 15.606 3 13.853 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
         </svg>
+        <span v-if="unreadCount > 0" class="chat-badge">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
       </button>
 
       <!-- Émotes -->
-      <button class="sidebar-btn" title="Émotes (E)">
+      <button class="sidebar-btn" :class="{ 'sidebar-btn--active': isEmoteOpen }" title="Émotes (E)" @click="isEmoteOpen = !isEmoteOpen">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
             d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -154,7 +220,21 @@ function confirmLeave() {
   <GameChatPanel
     :open="isChatOpen"
     :sidebar-width="SIDEBAR_WIDTH"
+    :game-id="gameStore.gameId"
+    :my-uid="gameStore.myUid"
     @update:open="isChatOpen = $event"
+  />
+
+  <GameEmotePanel
+    :open="isEmoteOpen"
+    :sidebar-width="SIDEBAR_WIDTH"
+    @update:open="isEmoteOpen = $event"
+    @select="onEmoteSelect"
+  />
+
+  <GameEmoteDisplay
+    :emote-id="displayEmoteId"
+    :author-name="displayEmoteAuthor"
   />
 
   <GameQuitConfirm
@@ -204,6 +284,32 @@ function confirmLeave() {
 .sidebar-btn--active {
   color: #C8AA6E;
   background: rgba(200, 170, 110, 0.1);
+}
+
+/* ── Chat badge ── */
+.chat-btn {
+  position: relative;
+}
+.chat-badge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: #e05050;
+  color: #fff;
+  font-size: 0.45rem;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+  animation: badge-pop 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes badge-pop {
+  from { transform: scale(0); }
+  to   { transform: scale(1); }
 }
 
 /* ── Restart button ── */
