@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { computed, provide } from 'vue'
+import { computed, provide, onMounted, onUnmounted } from 'vue'
 import GameSidebarDual from '@/components/game/GameSidebarDual.vue'
 import CardView from '@/components/game/CardView.vue'
 import ZoneView from '@/components/game/ZoneView.vue'
@@ -8,11 +8,50 @@ import { useLayout, SEPARATOR } from '@/composables/useLayout'
 import { useViewport } from '@/composables/useViewport'
 import { useDrag, DRAG_KEY, GAME_ACTIONS_KEY } from '@/composables/useDrag'
 import { useBoardShortcuts } from '@/composables/useBoardShortcuts'
+import { useGamePingArrow, PING_ARROW_KEY } from '@/composables/useGamePingArrow'
 import type { Rect } from '@/types/card.type'
 import type { CardState, GameAction, ZoneId } from '@riftbound/shared'
 
 const store = useGameStore()
 const { width: vw, height: vh } = useViewport()
+
+// ── Ping & Arrows ─────────────────────────────────────────────────────────────
+
+const pingArrow = useGamePingArrow(
+  () => store.gameId,
+  () => store.myUid,
+)
+provide(PING_ARROW_KEY, pingArrow)
+
+function arrowPath(sourceCardId: string, targetCardId: string): string {
+  const src = layouts.value.get(sourceCardId)
+  const tgt = layouts.value.get(targetCardId)
+  if (!src || !tgt) return ''
+  const ox = src.x + src.w / 2
+  const oy = src.y + src.h / 2
+  const tx = tgt.x + tgt.w / 2
+  const ty = tgt.y + tgt.h / 2
+  const dx = tx - ox
+  const dy = ty - oy
+  const dist = Math.sqrt(dx * dx + dy * dy)
+  const bend = Math.min(dist * 0.35, 80)
+  // Perpendicular offset for curve
+  const px = -dy / dist * bend
+  const py = dx / dist * bend
+  const cpx = ox + dx * 0.5 + px
+  const cpy = oy + dy * 0.5 + py
+  return `M ${ox} ${oy} Q ${cpx} ${cpy}, ${tx} ${ty}`
+}
+
+function onKeyDown(e: KeyboardEvent) {
+  if (e.key === 'Enter' && pingArrow.isArrowMode.value) {
+    e.preventDefault()
+    pingArrow.confirmArrows()
+  }
+}
+
+onMounted(() => window.addEventListener('keydown', onKeyDown))
+onUnmounted(() => window.removeEventListener('keydown', onKeyDown))
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 
@@ -184,7 +223,7 @@ function bleedRect(rect: Rect): Rect {
 
 <template>
   <div class="w-screen h-screen flex bg-[#0a1628]">
-    <GameSidebarDual/>
+    <GameSidebarDual @clear-arrows="pingArrow.clearMyArrows()"/>
 
     <div class="flex-1">
 
@@ -281,6 +320,57 @@ function bleedRect(rect: Rect): Rect {
         </template>
       </div>
 
+      <!-- SVG arrows overlay (z:5) -->
+      <svg class="arrows-layer" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="ah-local" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="rgba(255,112,67,0.95)"/>
+          </marker>
+          <marker id="ah-remote" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="rgba(239,83,80,0.95)"/>
+          </marker>
+        </defs>
+
+        <!-- Local targets (arrow mode in progress) -->
+        <template v-if="pingArrow.isArrowMode.value && pingArrow.localSourceCardId.value">
+          <path
+            v-for="targetId in pingArrow.localTargets.value"
+            :key="'local-' + targetId"
+            :d="arrowPath(pingArrow.localSourceCardId.value!, targetId)"
+            stroke="rgba(255,112,67,0.85)"
+            stroke-width="2"
+            fill="none"
+            stroke-dasharray="7 4"
+            stroke-linecap="round"
+            marker-end="url(#ah-local)"
+            class="arrow-path"
+          />
+        </template>
+
+        <!-- Confirmed arrows (from RTDB) -->
+        <template v-for="group in pingArrow.arrowGroups.value" :key="group.sourceCardId">
+          <path
+            v-for="targetId in group.targetCardIds"
+            :key="group.sourceCardId + '-' + targetId"
+            :d="arrowPath(group.sourceCardId, targetId)"
+            stroke="rgba(239,83,80,0.9)"
+            stroke-width="2.5"
+            fill="none"
+            stroke-linecap="round"
+            marker-end="url(#ah-remote)"
+            class="arrow-path arrow-path--solid"
+          />
+        </template>
+      </svg>
+
+      <!-- Arrow mode confirm button (z:10) -->
+      <Transition name="arrow-ok">
+        <div v-if="pingArrow.isArrowMode.value" class="arrow-ok-bar">
+          <button class="arrow-ok-btn" @click="pingArrow.confirmArrows()">OK</button>
+          <button class="arrow-cancel-btn" @click="pingArrow.cancelArrowMode()">✕</button>
+        </div>
+      </Transition>
+
     </div>
   </div>
 </template>
@@ -374,6 +464,100 @@ function bleedRect(rect: Rect): Rect {
 
 .zone-count--top-right   { top: 4px;    right: 4px; }
 .zone-count--bottom-left { bottom: 4px; left: 4px; }
+
+/* SVG arrows overlay */
+.arrows-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.arrow-path {
+  filter: drop-shadow(0 0 4px rgba(255, 112, 67, 0.4));
+}
+
+.arrow-path--solid {
+  filter: drop-shadow(0 0 5px rgba(239, 83, 80, 0.5));
+  animation: arrow-appear 0.3s ease-out;
+}
+
+@keyframes arrow-appear {
+  from { opacity: 0; stroke-dashoffset: 200; }
+  to   { opacity: 1; stroke-dashoffset: 0; }
+}
+
+/* Arrow mode OK bar */
+.arrow-ok-bar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: rgba(6, 15, 27, 0.92);
+  border: 1px solid rgba(255, 112, 67, 0.5);
+  border-radius: 8px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+}
+
+.arrow-ok-btn {
+  padding: 6px 20px;
+  border: 1px solid rgba(255, 112, 67, 0.6);
+  background: rgba(255, 112, 67, 0.12);
+  color: #ff7043;
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.arrow-ok-btn:hover {
+  background: rgba(255, 112, 67, 0.25);
+  border-color: #ff7043;
+  color: #ffab91;
+}
+
+.arrow-cancel-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.75rem;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.arrow-cancel-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.arrow-ok-enter-active,
+.arrow-ok-leave-active {
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.arrow-ok-enter-from,
+.arrow-ok-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(12px);
+}
 
 /* Resolve stack button */
 .resolve-btn {

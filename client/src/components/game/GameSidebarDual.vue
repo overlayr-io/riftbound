@@ -13,6 +13,8 @@ import GameEmoteDisplay from './GameEmoteDisplay.vue'
 const { SIDEBAR_WIDTH } = useViewport()
 const gameStore = useGameStore()
 
+const emit = defineEmits<{ clearArrows: [] }>()
+
 const isMyTurn = computed(() => {
   const uid = gameStore.myUid
   return !!uid && gameStore.currentRound?.currentTurn?.playerId === uid
@@ -180,9 +182,9 @@ onUnmounted(() => document.removeEventListener('keydown', onKey))
 
       <!-- Supprimer les flèches -->
       <button
-        class="sidebar-btn opacity-30 cursor-not-allowed"
-        title="Supprimer toutes les flèches (Échap)"
-        disabled
+        class="sidebar-btn"
+        title="Supprimer mes flèches"
+        @click="emit('clearArrows')"
       >
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
           <path d="M5 12h11M13 8l4 4-4 4" />

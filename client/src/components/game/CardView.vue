@@ -4,6 +4,7 @@ import type { CardState } from '@riftbound/shared'
 import type { CardLayout } from '@/types/card.type'
 import { DRAG_KEY, GAME_ACTIONS_KEY } from '@/composables/useDrag'
 import { useBoardShortcuts } from '@/composables/useBoardShortcuts'
+import { PING_ARROW_KEY, type PingArrowContext } from '@/composables/useGamePingArrow'
 import cardBack from '@/assets/img/card_back.png'
 import runeIcon from '@/assets/img/rune_icon.png'
 import CardContextMenu from '@/components/game/CardContextMenu.vue'
@@ -16,6 +17,7 @@ const props = defineProps<{
 
 const drag = inject(DRAG_KEY)
 const actions = inject(GAME_ACTIONS_KEY)
+const pingArrow = inject<PingArrowContext>(PING_ARROW_KEY)
 const { activeKey, handleCardClick } = useBoardShortcuts()
 
 // ── Visibility ──────────────────────────────────────────────────────────────
@@ -28,6 +30,16 @@ const isDropInvalid = computed(() =>
   drag?.hoveredZoneValid.value === false,
 )
 const isHovered = ref(false)
+const isPinged = computed(() => pingArrow?.pinggedCardIds.value.has(props.card.cardId) ?? false)
+const isArrowTarget = computed(() =>
+  pingArrow?.arrowGroups.value.some(g => g.targetCardIds.includes(props.card.cardId)) ?? false
+)
+const isLocalTarget = computed(() => pingArrow?.localTargets.value.has(props.card.cardId) ?? false)
+const isArrowSource = computed(() =>
+  pingArrow?.arrowGroups.value.some(g => g.sourceCardId === props.card.cardId) ||
+  pingArrow?.localSourceCardId.value === props.card.cardId
+)
+const isArrowMode = computed(() => pingArrow?.isArrowMode.value ?? false)
 
 const canSeeFront = computed(() => {
   const v = props.card.state.visibleTo
@@ -56,7 +68,6 @@ const style = computed(() => {
       width: L.w + 'px',
       height: L.h + 'px',
       zIndex: L.z,
-      pointerEvents: 'none' as const,
       // Explicit transition so opponent card movements animate when Firestore updates
       transition: 'transform 0.3s var(--ease)',
     }
@@ -104,8 +115,16 @@ function toggleExhausted() {
 }
 
 function onPointerDown(e: PointerEvent) {
-  if (!isOwned.value) return
   if (e.button !== 0) return
+
+  if (isArrowMode.value) {
+    e.preventDefault()
+    e.stopPropagation()
+    pingArrow?.toggleTarget(props.card.cardId)
+    return
+  }
+
+  if (!isOwned.value) return
 
   if (activeKey.value) {
     e.preventDefault()
@@ -116,6 +135,22 @@ function onPointerDown(e: PointerEvent) {
 
   if (NON_DRAGGABLE_ZONES.has(props.card.zoneId)) return
   drag?.onPointerDown(e, props.card.cardId, props.card.ownerId, props.layout, toggleExhausted)
+}
+
+function onPingClick(e: MouseEvent) {
+  e.preventDefault()
+  e.stopPropagation()
+  pingArrow?.sendPing(props.card.cardId)
+}
+
+function onArrowClick(e: MouseEvent) {
+  e.preventDefault()
+  e.stopPropagation()
+  if (isArrowMode.value) {
+    pingArrow?.toggleTarget(props.card.cardId)
+  } else {
+    pingArrow?.startArrowMode(props.card.cardId)
+  }
 }
 
 function onClick() {
@@ -145,7 +180,14 @@ function onContextMenu(e: MouseEvent) {
 <template>
   <div
     class="card"
-    :class="{ dragging: isBeingDragged }"
+    :class="{
+      dragging: isBeingDragged,
+      'card--pinged': isPinged,
+      'card--arrow-source': isArrowSource,
+      'card--arrow-target': isArrowTarget,
+      'card--local-target': isLocalTarget,
+      'card--arrow-mode': isArrowMode,
+    }"
     :style="style"
     @pointerdown="onPointerDown"
     @click="onClick"
@@ -179,6 +221,37 @@ function onContextMenu(e: MouseEvent) {
       <span v-if="card.state.damages" class="badge badge-damage">{{ card.state.damages }}</span>
       <span v-if="card.state.buffs" class="badge badge-buff">{{ card.state.buffs }}</span>
     </div>
+
+    <!-- Arrow button — flush top-left -->
+    <button
+      v-if="isHovered && !isBeingDragged && pingArrow"
+      class="card-action-btn card-action-arrow"
+      :class="{ active: isLocalTarget }"
+      title="Désigner comme cible"
+      @click.stop="onArrowClick"
+      @pointerdown.stop
+    >
+      <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2 14 C2 7, 9 4, 13 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+        <path d="M10 1.5 L13.5 2 L13 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+    </button>
+
+    <!-- Ping button — flush top-right -->
+    <button
+      v-if="isHovered && !isBeingDragged && pingArrow"
+      class="card-action-btn card-action-ping"
+      title="Ping"
+      @click.stop="onPingClick"
+      @pointerdown.stop
+    >
+      <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="8" cy="8" r="2" fill="currentColor"/>
+        <path d="M8 3a5 5 0 0 1 5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M8 1a7 7 0 0 1 7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity=".5"/>
+        <path d="M8 5.5a2.5 2.5 0 0 1 2.5 2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity=".75"/>
+      </svg>
+    </button>
   </div>
 
   <CardContextMenu
@@ -291,4 +364,114 @@ function onContextMenu(e: MouseEvent) {
 .badge-counter { background: #3a3d45; }
 .badge-damage  { background: #c0392b; }
 .badge-buff    { background: #e67e22; }
+
+/* ── Ping golden border ──────────────────────────────────────────────────── */
+
+.card--pinged .card-face {
+  box-shadow:
+    0 0 0 2px #C8AA6E,
+    0 0 20px rgba(200, 170, 110, 0.8),
+    0 0 40px rgba(200, 170, 110, 0.4);
+  animation: ping-pulse 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes ping-pulse {
+  from {
+    box-shadow:
+      0 0 0 2px #C8AA6E,
+      0 0 12px rgba(200, 170, 110, 0.6),
+      0 0 28px rgba(200, 170, 110, 0.3);
+  }
+  to {
+    box-shadow:
+      0 0 0 3px #e8ca8e,
+      0 0 28px rgba(200, 170, 110, 1),
+      0 0 50px rgba(200, 170, 110, 0.6);
+  }
+}
+
+/* ── Arrow source & targets ──────────────────────────────────────────────── */
+
+.card--arrow-source .card-face {
+  box-shadow:
+    0 0 0 2px rgba(255, 112, 67, 0.9),
+    0 0 14px rgba(255, 112, 67, 0.5);
+}
+
+.card--arrow-target .card-face {
+  box-shadow:
+    0 0 0 2px #ef5350,
+    0 0 16px rgba(239, 83, 80, 0.5);
+}
+
+.card--local-target .card-face {
+  box-shadow:
+    0 0 0 2px #ff7043,
+    0 0 18px rgba(255, 112, 67, 0.7);
+}
+
+/* Subtle pointer hint for all cards when arrow mode is active */
+.card--arrow-mode {
+  cursor: crosshair !important;
+}
+
+/* ── Card action buttons (hover) ─────────────────────────────────────────── */
+
+.card-action-btn {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  pointer-events: auto;
+  padding: 3px;
+  backdrop-filter: blur(4px);
+  transition: background 0.15s, color 0.15s;
+  z-index: 20;
+}
+
+.card-action-arrow {
+  top: 0;
+  left: 0;
+  border-radius: 0 0 5px 0;
+  background: rgba(6, 15, 27, 0.82);
+  color: rgba(200, 170, 110, 0.85);
+  border-right: 1px solid rgba(200, 170, 110, 0.25);
+  border-bottom: 1px solid rgba(200, 170, 110, 0.25);
+}
+
+.card-action-arrow:hover {
+  background: rgba(200, 170, 110, 0.18);
+  color: #C8AA6E;
+}
+
+.card-action-arrow.active {
+  background: rgba(255, 112, 67, 0.22);
+  color: #ff7043;
+  border-right-color: rgba(255, 112, 67, 0.4);
+  border-bottom-color: rgba(255, 112, 67, 0.4);
+}
+
+.card-action-ping {
+  top: 0;
+  right: 0;
+  border-radius: 0 0 0 5px;
+  background: rgba(6, 15, 27, 0.82);
+  color: rgba(200, 170, 110, 0.85);
+  border-left: 1px solid rgba(200, 170, 110, 0.25);
+  border-bottom: 1px solid rgba(200, 170, 110, 0.25);
+}
+
+.card-action-ping:hover {
+  background: rgba(200, 170, 110, 0.18);
+  color: #C8AA6E;
+}
+
+.card-action-btn svg {
+  width: 100%;
+  height: 100%;
+}
 </style>
