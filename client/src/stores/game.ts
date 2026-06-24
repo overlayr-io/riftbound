@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { doc, addDoc, collection, onSnapshot, updateDoc, serverTimestamp, type Unsubscribe } from 'firebase/firestore'
-import type { Card, CardVisibleTo, DeckList, GameAction, GameMode, GameMatchFormat, GameDeckFormat, GameRound, ZoneId } from '@riftbound/shared'
+import { doc, addDoc, collection, onSnapshot, updateDoc, serverTimestamp, deleteField, type Unsubscribe } from 'firebase/firestore'
+import type { Card, CardState, CardType, CardVisibleTo, DeckList, GameAction, GameMode, GameMatchFormat, GameDeckFormat, GameRound, ZoneId } from '@riftbound/shared'
 import type { PlayerId } from '@riftbound/shared'
 import { firestore } from '@/firebase'
 import { useAuthStore } from './auth'
@@ -275,13 +275,13 @@ export const useGameStore = defineStore('game', () => {
     }).catch(console.error)
   }
 
-  function sendToDeck(cardId: string, deckZone: ZoneId, position: 'top' | 'bottom') {
+  function sendToDeck(cardId: string, deckZone: ZoneId, position: 'top' | 'bottom', silent = false) {
     const round = currentRound.value
     if (!round?.cards[cardId]) return
     const ref = roundRef()
     if (!ref) return
     const uid = myUid.value
-    if (uid) writeLog(`${actorName(uid)} a placé ${cardName(cardId)} ${position === 'top' ? 'au-dessus' : 'en-dessous'} de ${zoneFr(deckZone)}`, uid)
+    if (uid && !silent) writeLog(`${actorName(uid)} a placé ${cardName(cardId)} ${position === 'top' ? 'au-dessus' : 'en-dessous'} de ${zoneFr(deckZone)}`, uid)
 
     const deckCards = Object.values(round.cards).filter(c => c.zoneId === deckZone)
     const newOrder = position === 'top'
@@ -302,6 +302,12 @@ export const useGameStore = defineStore('game', () => {
       _updatedBy: sessionId,
       updatedAt: serverTimestamp(),
     }).catch(console.error)
+  }
+
+  // Move a card to the owner's hand without writing a log entry (used by Vision
+  // so the card name is not leaked to opponents via the game log).
+  function moveToHandSilent(cardId: string) {
+    commitMove(cardId, 'hand', 'SELF')
   }
 
   const DISSOLVE_GROUP_ZONES = new Set<ZoneId>(['discard', 'banish', 'hand', 'main_deck', 'runes_deck'])
@@ -337,12 +343,21 @@ export const useGameStore = defineStore('game', () => {
   // Zones where cards are placed permanently — exhausted state is managed manually
   const NO_AUTO_EXHAUST_ZONES = new Set<ZoneId>(['champion', 'legend', 'hand', 'main_deck', 'runes_deck'])
 
+  // Zones where tokens are destroyed instead of moved
+  const TOKEN_DESTROY_ZONES = new Set<ZoneId>(['banish', 'discard', 'main_deck', 'runes_deck', 'hand'])
+
   // Core primitive — all game actions funnel through this
   function commitMove(cardId: string, toZoneId: ZoneId, overrideVisibility?: CardVisibleTo) {
     const round = currentRound.value
     if (!round?.cards[cardId]) return
     const ref = roundRef()
     if (!ref) return
+
+    // Tokens are destroyed when leaving the board
+    if (round.cards[cardId].isToken && TOKEN_DESTROY_ZONES.has(toZoneId)) {
+      destroyToken(cardId)
+      return
+    }
 
     if (DISSOLVE_GROUP_ZONES.has(toZoneId)) dissolveGroup(cardId, ref)
 
@@ -431,6 +446,10 @@ export const useGameStore = defineStore('game', () => {
         return `${who} a attaché ${cardName(action.childId)} à ${cardName(action.parentId)}`
       case 'UNGROUP_CARD':
         return `${who} a détaché ${cardName(action.cardId)}`
+      case 'CREATE_TOKEN':
+        return `${who} a créé le token "${action.name}"`
+      case 'DESTROY_TOKEN':
+        return `${who} a détruit le token ${cardName(action.cardId)}`
       case 'SET_COUNTERS':
         return action.value !== null
           ? `${who} a mis ${action.value} compteur(s) sur ${cardName(action.cardId)}`
@@ -456,6 +475,60 @@ export const useGameStore = defineStore('game', () => {
       description,
       createdAt: serverTimestamp(),
     }).catch(() => {})
+  }
+
+  function destroyToken(cardId: string) {
+    const round = currentRound.value
+    const ref = roundRef()
+    if (!round?.cards[cardId] || !ref) return
+    const uid = myUid.value
+    if (uid) writeLog(`${actorName(uid)} a détruit le token ${cardName(cardId)}`, uid)
+    dissolveGroup(cardId, ref)
+    delete round.cards[cardId]
+    updateDoc(ref, {
+      [`cards.${cardId}`]: deleteField(),
+      _updatedBy: sessionId,
+      updatedAt: serverTimestamp(),
+    }).catch(console.error)
+  }
+
+  function createToken(name: string, cardType: CardType, imageUrl: string, zoneId: ZoneId) {
+    const round = currentRound.value
+    const ref = roundRef()
+    const uid = myUid.value
+    if (!round || !ref || !uid) return
+
+    const cardId = `token_${uid}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+    const zoneCards = Object.values(round.cards).filter(c => c.zoneId === zoneId)
+    const order = Math.max(-1, ...zoneCards.map(c => c.order)) + 1
+
+    const newCard: CardState = {
+      cardId,
+      baseCardId: 'token',
+      description: { name, type: cardType, imageUrl },
+      ownerId: uid,
+      controllerId: uid,
+      zoneId,
+      order,
+      state: {
+        exhausted: true,
+        counters: null,
+        damages: null,
+        buffs: null,
+        visibleTo: 'ALL',
+        groupTo: [],
+      },
+      isToken: true,
+    }
+
+    round.cards[cardId] = newCard
+    writeLog(`${actorName(uid)} a créé le token "${name}"`, uid)
+
+    updateDoc(ref, {
+      [`cards.${cardId}`]: newCard,
+      _updatedBy: sessionId,
+      updatedAt: serverTimestamp(),
+    }).catch(console.error)
   }
 
   function applyAction(action: GameAction) {
@@ -593,6 +666,14 @@ export const useGameStore = defineStore('game', () => {
         break
       }
 
+      case 'CREATE_TOKEN':
+        createToken(action.name, action.cardType, action.imageUrl, action.zoneId)
+        break
+
+      case 'DESTROY_TOKEN':
+        destroyToken(action.cardId)
+        break
+
       case 'SET_COUNTERS':
       case 'SET_DAMAGES':
       case 'SET_BUFF': {
@@ -648,6 +729,7 @@ export const useGameStore = defineStore('game', () => {
     attachGame,
     detach,
     sendToDeck,
+    moveToHandSilent,
     resolveStack,
     writeLog,
     actorName,
@@ -660,6 +742,8 @@ export const useGameStore = defineStore('game', () => {
     submitMulligan,
     devSkipSetup,
     applyAction,
+    createToken,
+    destroyToken,
     setScore,
   }
 })

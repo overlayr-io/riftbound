@@ -1,5 +1,6 @@
 import {PlayerId} from "./player";
 import {ZoneId} from "./zone";
+import {CardType} from "./card";
 
 // ── Deck actions ──────────────────────────────────────────────────────────────
 
@@ -125,6 +126,24 @@ export type SetBuffAction = {
   value: number | null
 }
 
+// ── Token actions ─────────────────────────────────────────────────────────────
+
+export type CreateTokenAction = {
+  type: 'CREATE_TOKEN'
+  playerId: PlayerId
+  cardId: string
+  name: string
+  cardType: CardType
+  imageUrl: string
+  zoneId: ZoneId
+}
+
+export type DestroyTokenAction = {
+  type: 'DESTROY_TOKEN'
+  playerId: PlayerId
+  cardId: string
+}
+
 // ── Union ─────────────────────────────────────────────────────────────────────
 
 export type GameAction =
@@ -145,6 +164,8 @@ export type GameAction =
   | SetCountersAction
   | SetDamagesAction
   | SetBuffAction
+  | CreateTokenAction
+  | DestroyTokenAction
   // | CopyCardAction
   // | RevealCardForControllerAction
   // | GroupCardAction

@@ -1,16 +1,21 @@
 <script lang="ts" setup>
-import { computed, provide, onMounted, onUnmounted } from 'vue'
+import { computed, provide, ref, onMounted, onUnmounted } from 'vue'
 import GameSidebarDual from '@/components/game/GameSidebarDual.vue'
 import CardView from '@/components/game/CardView.vue'
 import ZoneView from '@/components/game/ZoneView.vue'
+import TokenCreationPanel from '@/components/game/TokenCreationPanel.vue'
+import DeckContextMenu from '@/components/game/DeckContextMenu.vue'
+import VisionTray from '@/components/game/VisionTray.vue'
+import RevealBanner from '@/components/game/RevealBanner.vue'
 import { useGameStore } from '@/stores/game'
 import { useLayout, SEPARATOR } from '@/composables/useLayout'
 import { useViewport } from '@/composables/useViewport'
 import { useDrag, DRAG_KEY, GAME_ACTIONS_KEY } from '@/composables/useDrag'
 import { useBoardShortcuts } from '@/composables/useBoardShortcuts'
 import { useGamePingArrow, PING_ARROW_KEY } from '@/composables/useGamePingArrow'
+import { useDeckVision } from '@/composables/useDeckVision'
 import type { Rect } from '@/types/card.type'
-import type { CardState, GameAction, ZoneId } from '@riftbound/shared'
+import type { CardState, CardType, GameAction, ZoneId } from '@riftbound/shared'
 
 const store = useGameStore()
 const { width: vw, height: vh } = useViewport()
@@ -22,6 +27,11 @@ const pingArrow = useGamePingArrow(
   () => store.myUid,
 )
 provide(PING_ARROW_KEY, pingArrow)
+
+const deckVision = useDeckVision(
+  () => store.gameId,
+  () => store.myUid,
+)
 
 function arrowPath(sourceCardId: string, targetCardId: string): string {
   const src = layouts.value.get(sourceCardId)
@@ -43,17 +53,59 @@ function arrowPath(sourceCardId: string, targetCardId: string): string {
   return `M ${ox} ${oy} Q ${cpx} ${cpy}, ${tx} ${ty}`
 }
 
+// ── Token creation panel ──────────────────────────────────────────────────────
+
+const TOKEN_ZONES = new Set<ZoneId>(['base', 'battlefield_owner', 'battlefield_opponent'])
+
+const tokenPanelOpen = ref(false)
+const tokenPanelX = ref(0)
+const tokenPanelY = ref(0)
+const tokenPanelZone = ref<ZoneId | null>(null)
+
+function openTokenPanel(zoneId: ZoneId, x: number, y: number) {
+  tokenPanelZone.value = zoneId
+  tokenPanelX.value = x
+  tokenPanelY.value = y
+  tokenPanelOpen.value = true
+}
+
+function onTokenCreate(name: string, cardType: CardType, imageUrl: string, zoneId: ZoneId) {
+  store.createToken(name, cardType, imageUrl, zoneId)
+}
+
+// ── Keyboard shortcuts ─────────────────────────────────────────────────────────
+
 function onKeyDown(e: KeyboardEvent) {
   if (e.key === 'Enter' && pingArrow.isArrowMode.value) {
     e.preventDefault()
     pingArrow.confirmArrows()
+    return
+  }
+  const tag = (e.target as HTMLElement).tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return
+  if (e.key === 't') {
+    if (tokenPanelOpen.value) {
+      tokenPanelOpen.value = false
+      return
+    }
+    // Default to my battlefield_owner zone
+    const myId = store.myUid
+    if (!myId) return
+    const zoneKey = `${myId}_battlefield_owner`
+    const rect = zones.value[zoneKey]
+    if (rect) {
+      openTokenPanel('battlefield_owner', rect.x + rect.w / 2, rect.y + rect.h / 2)
+    } else {
+      // fallback: center of screen
+      openTokenPanel('battlefield_owner', window.innerWidth / 2, window.innerHeight / 2)
+    }
   }
 }
 
 onMounted(() => window.addEventListener('keydown', onKeyDown))
 onUnmounted(() => window.removeEventListener('keydown', onKeyDown))
 
-// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+// ── Board shortcuts ───────────────────────────────────────────────────────────
 
 const shortcuts = useBoardShortcuts()
 
@@ -138,10 +190,218 @@ function resolveStack() {
   store.resolveStack()
 }
 
+// ── Deck context menu ─────────────────────────────────────────────────────────
+
+const deckMenuVisible = ref(false)
+const deckMenuX = ref(0)
+const deckMenuY = ref(0)
+const deckMenuKey = ref<string | null>(null)
+
+function isDeckZone(key: string): boolean {
+  const { owner, zone } = parseZoneKey(key)
+  return !!owner && owner === store.myUid && zone === 'main_deck'
+}
+
+// Anti-cheat halo: an opponent is currently looking at the top of this deck.
+function visionOnZone(key: string): { name: string; count: number } | null {
+  const { owner, zone } = parseZoneKey(key)
+  if (zone !== 'main_deck' || !owner || owner === store.myUid) return null
+  const presence = deckVision.activeVisions.value[owner]
+  if (!presence) return null
+  return { name: store.actorName(owner), count: presence.count }
+}
+
+function deckCardsSorted(key: string) {
+  const { owner, zone } = parseZoneKey(key)
+  return allCards.value
+    .filter(c => c.ownerId === owner && c.zoneId === zone)
+    .sort((a, b) => b.order - a.order)
+}
+
+function deckCount(key: string): number {
+  return deckCardsSorted(key).length
+}
+
+function onDeckContextMenu(e: MouseEvent, key: string) {
+  if (!isDeckZone(key)) return
+  e.preventDefault()
+  deckMenuKey.value = key
+  deckMenuX.value = e.clientX
+  deckMenuY.value = e.clientY
+  deckMenuVisible.value = true
+}
+
+// ── Vision / Reveal tray ──────────────────────────────────────────────────────
+
+const trayOpen = ref(false)
+const trayMode = ref<'vision' | 'reveal'>('vision')
+// Ordered card ids currently in the tray ([0] = top of deck).
+const trayCardIds = ref<string[]>([])
+// Snapshot of the deck order (ids) when the tray opened, to detect a reorder.
+const trayOriginalDeck = ref<string[]>([])
+
+// Per-session counters for the closing log summary.
+let trayLookedCount = 0
+let trayHandCount = 0
+let trayRevealedCount = 0
+
+const trayCards = computed<CardState[]>(() =>
+  trayCardIds.value
+    .map(id => store.currentRound?.cards[id])
+    .filter((c): c is CardState => !!c),
+)
+
+function openTray(count: number, mode: 'vision' | 'reveal') {
+  const key = deckMenuKey.value
+  if (!key) return
+  const { owner, zone } = parseZoneKey(key)
+  const top = deckCardsSorted(key).slice(0, count)
+  if (!top.length) return
+
+  trayMode.value = mode
+  trayCardIds.value = top.map(c => c.cardId)
+  trayOriginalDeck.value = deckCardsSorted(key).map(c => c.cardId)
+  trayLookedCount = top.length
+  trayHandCount = 0
+  trayRevealedCount = 0
+  trayOpen.value = true
+
+  if (mode === 'vision') {
+    // Live anti-cheat presence: opponents see a halo + count on this deck.
+    deckVision.setVisionPresence(top.length)
+  } else {
+    // Reveal: flip the cards face-up for everyone, then broadcast the banner.
+    for (const card of top) {
+      store.applyAction({ type: 'REVEAL_CARD', playerId: owner ?? '', cardId: card.cardId })
+    }
+    deckVision.broadcastReveal(top.map(c => c.cardId))
+  }
+  void zone
+}
+
+function onDeckVision(count: number) { openTray(count, 'vision') }
+function onDeckReveal(count: number) { openTray(count, 'reveal') }
+
+function onTrayAction(cardId: string, action: 'top' | 'bottom' | 'hand' | 'reveal') {
+  const uid = store.myUid ?? ''
+  switch (action) {
+    case 'top':
+      // Silent: do not leak the card name to opponents via the log.
+      store.sendToDeck(cardId, 'main_deck', 'top', trayMode.value === 'vision')
+      break
+    case 'bottom':
+      store.sendToDeck(cardId, 'main_deck', 'bottom', trayMode.value === 'vision')
+      break
+    case 'hand':
+      if (trayMode.value === 'vision') store.moveToHandSilent(cardId)
+      else store.applyAction({ type: 'MOVE_TO_HAND', playerId: uid, cardId, fromZoneId: 'main_deck' })
+      trayHandCount++
+      break
+    case 'reveal':
+      store.applyAction({ type: 'REVEAL_CARD', playerId: uid, cardId })
+      deckVision.broadcastReveal([...trayRevealedIds(), cardId])
+      trayRevealedCount++
+      break
+  }
+  // Remove the handled card from the tray; close when empty.
+  trayCardIds.value = trayCardIds.value.filter(id => id !== cardId)
+  if (!trayCardIds.value.length) closeTray()
+}
+
+function trayRevealedIds(): string[] {
+  // Cards already revealed this session stay in the broadcast set.
+  const key = deckMenuKey.value
+  if (!key) return []
+  return deckCardsSorted(key)
+    .filter(c => c.state.visibleTo === 'ALL')
+    .map(c => c.cardId)
+}
+
+function closeTray() {
+  const uid = store.myUid ?? ''
+  if (trayMode.value === 'vision' && trayLookedCount > 0) {
+    store.writeLog(`${store.actorName(uid)} a regardé ${trayLookedCount} carte(s) du dessus de son deck`, uid)
+    const key = deckMenuKey.value
+    const reordered = key
+      ? deckCardsSorted(key).map(c => c.cardId).join(',') !== trayOriginalDeck.value.join(',')
+      : false
+    if (reordered && trayHandCount === 0) {
+      store.writeLog(`${store.actorName(uid)} a réordonné son deck`, uid)
+    }
+    if (trayHandCount > 0) {
+      store.writeLog(`${store.actorName(uid)} a mis ${trayHandCount} carte(s) en main`, uid)
+    }
+    deckVision.clearVisionPresence()
+  }
+  trayOpen.value = false
+  trayCardIds.value = []
+}
+
+function onDeckDraw(count: number) {
+  const key = deckMenuKey.value
+  if (!key) return
+  const { owner, zone } = parseZoneKey(key)
+  const top = deckCardsSorted(key).slice(0, count)
+  for (const card of top) {
+    store.applyAction({ type: 'DRAW_CARD', playerId: owner ?? '', cardId: card.cardId, fromZoneId: zone as ZoneId })
+  }
+}
+
+// ── Reveal banner (opponents' view of other players' reveals) ──────────────────
+
+const incomingReveal = computed(() => {
+  const myId = store.myUid
+  for (const ev of Object.values(deckVision.reveals.value)) {
+    if (ev.playerId !== myId) return ev
+  }
+  return null
+})
+
+const incomingRevealCards = computed<CardState[]>(() => {
+  const ev = incomingReveal.value
+  if (!ev) return []
+  return ev.cardIds
+    .map(id => store.currentRound?.cards[id])
+    .filter((c): c is CardState => !!c)
+})
+
+const revealAnchor = computed(() => {
+  const ev = incomingReveal.value
+  if (!ev) return { x: 0, y: 0 }
+  const key = `${ev.playerId}_main_deck`
+  const rect = zones.value[key]
+  if (!rect) return { x: window.innerWidth - 24, y: window.innerHeight - 24 }
+  return { x: rect.x + rect.w, y: rect.y }
+})
+
+function dismissReveal() {
+  // Only the revealer can clear their own broadcast; opponents just hide locally.
+  const ev = incomingReveal.value
+  if (ev && ev.playerId === store.myUid) deckVision.clearReveal()
+}
+
 function isClickableZone(key: string): boolean {
   if (isDragging.value) return false
   const { owner, zone } = parseZoneKey(key)
   return !!owner && owner === store.myUid && zone in ZONE_CLICK_ACTION
+}
+
+function isTokenZone(key: string): boolean {
+  const { owner, zone } = parseZoneKey(key)
+  if (!TOKEN_ZONES.has(zone as ZoneId)) return false
+  // Show + button on my own zones only (base, battlefield_owner, battlefield_opponent are keyed by their owner)
+  // For battlefield_opponent the zone belongs to opponent but we still allow token creation on it
+  if (zone === 'battlefield_opponent') return !!owner && owner === store.myUid
+  return !!owner && owner === store.myUid
+}
+
+function onTokenZonePlus(key: string, event: MouseEvent) {
+  const { zone } = parseZoneKey(key)
+  const rect = zones.value[key]
+  if (!rect) return
+  const btnEl = event.currentTarget as HTMLElement
+  const bRect = btnEl.getBoundingClientRect()
+  openTokenPanel(zone as ZoneId, bRect.left + bRect.width / 2, bRect.top - 4)
 }
 
 // ── Zone labels & counts ───────────────────────────────────────────────────────
@@ -293,6 +553,7 @@ function bleedRect(rect: Rect): Rect {
             style="pointer-events: auto"
             :style="{ left: rect.x + 'px', top: rect.y + 'px', width: rect.w + 'px', height: rect.h + 'px' }"
             @click="onZoneClick(String(key))"
+            @contextmenu="onDeckContextMenu($event, String(key))"
           />
 
           <!-- Résoudre button for stack zone -->
@@ -303,6 +564,34 @@ function bleedRect(rect: Rect): Rect {
             :style="{ left: rect.x + 'px', top: rect.y + 'px', width: rect.w + 'px', height: rect.h + 'px' }"
           >
             <button class="resolve-btn" style="pointer-events: auto" @click="resolveStack()">Résoudre</button>
+          </div>
+
+          <!-- Token + button for base / battlefield zones -->
+          <div
+            v-if="isTokenZone(String(key)) && rect.w > 0"
+            class="zone-overlay"
+            style="pointer-events: none"
+            :style="{ left: rect.x + 'px', top: rect.y + 'px', width: rect.w + 'px', height: rect.h + 'px' }"
+          >
+            <button
+              class="token-add-btn"
+              style="pointer-events: auto"
+              title="Créer un token (T)"
+              @click="onTokenZonePlus(String(key), $event)"
+            >+</button>
+          </div>
+
+          <!-- Anti-cheat halo: opponent is looking at the top of their deck -->
+          <div
+            v-if="visionOnZone(String(key)) && rect.w > 0"
+            class="zone-overlay vision-halo"
+            style="pointer-events: none"
+            :style="{ left: rect.x + 'px', top: rect.y + 'px', width: rect.w + 'px', height: rect.h + 'px' }"
+          >
+            <div class="vision-halo-label">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              {{ visionOnZone(String(key))!.name }} regarde {{ visionOnZone(String(key))!.count }} carte{{ visionOnZone(String(key))!.count > 1 ? 's' : '' }}…
+            </div>
           </div>
 
         </template>
@@ -362,6 +651,46 @@ function bleedRect(rect: Rect): Rect {
           />
         </template>
       </svg>
+
+      <!-- Deck context menu -->
+      <DeckContextMenu
+        :visible="deckMenuVisible"
+        :x="deckMenuX"
+        :y="deckMenuY"
+        :deck-count="deckMenuKey ? deckCount(deckMenuKey) : 0"
+        @close="deckMenuVisible = false"
+        @vision="onDeckVision"
+        @reveal="onDeckReveal"
+        @draw="onDeckDraw"
+      />
+
+      <!-- Vision / Reveal tray (the acting player's own view) -->
+      <VisionTray
+        :open="trayOpen"
+        :cards="trayCards"
+        :mode="trayMode"
+        @action="onTrayAction"
+        @close="closeTray"
+      />
+
+      <!-- Reveal banner (other players' reveals, 2-phase) -->
+      <RevealBanner
+        v-if="incomingRevealCards.length"
+        :cards="incomingRevealCards"
+        :revealer-name="incomingReveal ? store.actorName(incomingReveal.playerId) : ''"
+        :anchor-x="revealAnchor.x"
+        :anchor-y="revealAnchor.y"
+        @done="dismissReveal"
+      />
+
+      <!-- Token creation panel -->
+      <TokenCreationPanel
+        v-model:open="tokenPanelOpen"
+        :x="tokenPanelX"
+        :y="tokenPanelY"
+        :target-zone="tokenPanelZone"
+        @create="onTokenCreate"
+      />
 
       <!-- Arrow mode confirm button (z:10) -->
       <Transition name="arrow-ok">
@@ -428,6 +757,37 @@ function bleedRect(rect: Rect): Rect {
   background: rgba(255, 255, 255, 0.06);
 }
 
+/* Anti-cheat vision halo */
+.vision-halo {
+  border-radius: 6px;
+  box-shadow: 0 0 0 3px rgba(200, 170, 110, 0.35), 0 0 18px rgba(200, 170, 110, 0.4);
+  border: 1px solid #C8AA6E;
+  animation: vision-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes vision-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(200, 170, 110, 0.3), 0 0 14px rgba(200, 170, 110, 0.3); }
+  50%      { box-shadow: 0 0 0 4px rgba(200, 170, 110, 0.5), 0 0 22px rgba(200, 170, 110, 0.55); }
+}
+
+.vision-halo-label {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  padding: 5px 10px;
+  background: rgba(13, 28, 46, 0.94);
+  border: 1px solid rgba(200, 170, 110, 0.3);
+  border-radius: 6px;
+  color: #F2E5CD;
+  font-size: 11px;
+}
+.vision-halo-label svg { color: #C8AA6E; flex-shrink: 0; }
+
 /* Zone labels */
 .zone-name {
   position: absolute;
@@ -464,6 +824,34 @@ function bleedRect(rect: Rect): Rect {
 
 .zone-count--top-right   { top: 4px;    right: 4px; }
 .zone-count--bottom-left { bottom: 4px; left: 4px; }
+
+/* Token + button */
+.token-add-btn {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: rgba(200, 170, 110, 0.18);
+  border: 1px solid rgba(200, 170, 110, 0.55);
+  color: #C8AA6E;
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.15s, background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  box-shadow: 0 0 4px rgba(200, 170, 110, 0.2);
+}
+.token-add-btn:hover {
+  opacity: 1;
+  background: rgba(200, 170, 110, 0.3);
+  border-color: #C8AA6E;
+  box-shadow: 0 0 8px rgba(200, 170, 110, 0.4);
+}
 
 /* SVG arrows overlay */
 .arrows-layer {
