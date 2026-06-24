@@ -136,6 +136,7 @@ export type CreateTokenAction = {
   cardType: CardType
   imageUrl: string
   zoneId: ZoneId
+  exhausted?: boolean
 }
 
 export type DestroyTokenAction = {

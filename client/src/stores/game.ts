@@ -492,7 +492,7 @@ export const useGameStore = defineStore('game', () => {
     }).catch(console.error)
   }
 
-  function createToken(name: string, cardType: CardType, imageUrl: string, zoneId: ZoneId) {
+  function createToken(name: string, cardType: CardType, imageUrl: string, zoneId: ZoneId, exhausted = true) {
     const round = currentRound.value
     const ref = roundRef()
     const uid = myUid.value
@@ -511,7 +511,7 @@ export const useGameStore = defineStore('game', () => {
       zoneId,
       order,
       state: {
-        exhausted: true,
+        exhausted,
         counters: null,
         damages: null,
         buffs: null,
@@ -667,7 +667,7 @@ export const useGameStore = defineStore('game', () => {
       }
 
       case 'CREATE_TOKEN':
-        createToken(action.name, action.cardType, action.imageUrl, action.zoneId)
+        createToken(action.name, action.cardType, action.imageUrl, action.zoneId, action.exhausted ?? true)
         break
 
       case 'DESTROY_TOKEN':

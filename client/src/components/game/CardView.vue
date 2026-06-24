@@ -60,6 +60,10 @@ function rotStr(rotation?: number, cssRotation?: number): string {
   return base + css
 }
 
+const runeTokenOpacity = computed(() =>
+  props.card.isToken && props.card.description.type === 'rune' ? 0.7 : 1
+)
+
 const style = computed(() => {
   if (!isOwned.value) {
     const L = props.layout
@@ -68,6 +72,7 @@ const style = computed(() => {
       width: L.w + 'px',
       height: L.h + 'px',
       zIndex: L.z,
+      opacity: runeTokenOpacity.value,
       // Explicit transition so opponent card movements animate when Firestore updates
       transition: 'transform 0.3s var(--ease)',
     }
@@ -97,6 +102,7 @@ const style = computed(() => {
     width: L.w + 'px',
     height: L.h + 'px',
     zIndex: L.z,
+    opacity: runeTokenOpacity.value,
     cursor: isOwned.value && activeKey.value ? 'crosshair' : undefined,
     filter: isOwned.value && activeKey.value && isHovered.value
       ? 'drop-shadow(0 0 10px rgba(192, 57, 43, 0.6))'
@@ -163,6 +169,35 @@ function onClick() {
 
 const RUNE_ZONES = new Set(['runes', 'runes_deck'])
 
+const isRuneInPlay = computed(() =>
+  props.card.zoneId === 'runes' &&
+  props.card.description.type === 'rune' &&
+  isOwned.value
+)
+
+function onRecycleRune(e: MouseEvent) {
+  e.preventDefault()
+  e.stopPropagation()
+  actions?.applyAction({ type: 'RECYCLE_RUNE', playerId: props.card.controllerId, cardId: props.card.cardId })
+}
+
+function onRecycleAndToken(e: MouseEvent) {
+  e.preventDefault()
+  e.stopPropagation()
+  // Create a ghost token copy first, then recycle the original
+  actions?.applyAction({
+    type: 'CREATE_TOKEN',
+    playerId: props.card.controllerId,
+    cardId: `rune_token_${props.card.cardId}_${Date.now()}`,
+    name: props.card.description.name,
+    cardType: props.card.description.type,
+    imageUrl: props.card.description.imageUrl,
+    zoneId: 'runes',
+    exhausted: false,
+  })
+  actions?.applyAction({ type: 'RECYCLE_RUNE', playerId: props.card.controllerId, cardId: props.card.cardId })
+}
+
 const ctxVisible = ref(false)
 const ctxX = ref(0)
 const ctxY = ref(0)
@@ -209,22 +244,38 @@ function onContextMenu(e: MouseEvent) {
       >
     </div>
 
-    <img
-      v-if="card.description.type === 'rune' && isOwned"
-      class="rune-badge"
-      :src="runeIcon"
-      alt="rune"
-    >
-
-    <div v-if="canSeeFront" class="badges">
+<div v-if="canSeeFront" class="badges">
       <span v-if="card.state.counters" class="badge badge-counter">{{ card.state.counters }}</span>
       <span v-if="card.state.damages" class="badge badge-damage">{{ card.state.damages }}</span>
       <span v-if="card.state.buffs" class="badge badge-buff">{{ card.state.buffs }}</span>
     </div>
 
-    <!-- Arrow button — flush top-left -->
+    <!-- Rune: recycle (top-left) -->
     <button
-      v-if="isHovered && !isBeingDragged && pingArrow"
+      v-if="isRuneInPlay && isHovered && !isBeingDragged"
+      class="rune-action-btn rune-action-btn--left"
+      title="Recycler sous le deck de runes"
+      @click.stop="onRecycleRune"
+      @pointerdown.stop
+    >
+      <img :src="runeIcon" width="22" height="22" alt="" class="rune-action-img" />
+    </button>
+
+    <!-- Rune: recycle + token (top-right, seulement si non-exhausted) -->
+    <button
+      v-if="isRuneInPlay && isHovered && !isBeingDragged && !card.state.exhausted"
+      class="rune-action-btn rune-action-btn--right"
+      title="Recycler et créer un token"
+      @click.stop="onRecycleAndToken"
+      @pointerdown.stop
+    >
+      <img :src="runeIcon" width="22" height="22" alt="" class="rune-action-img" />
+      <span class="rune-action-badge">1</span>
+    </button>
+
+    <!-- Arrow button — flush top-left (non-rune cards) -->
+    <button
+      v-if="!isRuneInPlay && isHovered && !isBeingDragged && pingArrow"
       class="card-action-btn card-action-arrow"
       :class="{ active: isLocalTarget }"
       title="Désigner comme cible"
@@ -237,9 +288,9 @@ function onContextMenu(e: MouseEvent) {
       </svg>
     </button>
 
-    <!-- Ping button — flush top-right -->
+    <!-- Ping button — flush top-right (non-rune cards) -->
     <button
-      v-if="isHovered && !isBeingDragged && pingArrow"
+      v-if="!isRuneInPlay && isHovered && !isBeingDragged && pingArrow"
       class="card-action-btn card-action-ping"
       title="Ping"
       @click.stop="onPingClick"
@@ -252,6 +303,7 @@ function onContextMenu(e: MouseEvent) {
         <path d="M8 5.5a2.5 2.5 0 0 1 2.5 2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity=".75"/>
       </svg>
     </button>
+
   </div>
 
   <CardContextMenu
@@ -311,28 +363,6 @@ function onContextMenu(e: MouseEvent) {
   transform: rotateY(180deg);
 }
 
-.rune-badge {
-  position: absolute;
-  top: 4px;
-  left: 4px;
-  width: 22px;
-  height: 22px;
-  object-fit: contain;
-  opacity: 0;
-  transition: opacity 0.15s, transform 0.15s;
-  pointer-events: none;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
-  z-index: 10;
-}
-
-.card:hover .rune-badge {
-  opacity: 0.85;
-}
-
-.rune-badge:hover {
-  opacity: 1 !important;
-  transform: scale(1.15);
-}
 
 .badges {
   position: absolute;
@@ -473,5 +503,67 @@ function onContextMenu(e: MouseEvent) {
 .card-action-btn svg {
   width: 100%;
   height: 100%;
+}
+
+.rune-action-btn {
+  position: absolute;
+  top: 0;
+  width: 26px;
+  height: 26px;
+  padding: 2px;
+  border: none;
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 20;
+  background: rgba(6, 15, 27, 0.82);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.rune-action-btn--left {
+  left: 0;
+  border-radius: 0 0 5px 0;
+  border-right: 1px solid rgba(200, 170, 110, 0.25);
+  border-bottom: 1px solid rgba(200, 170, 110, 0.25);
+}
+
+.rune-action-btn--right {
+  right: 0;
+  border-radius: 0 0 0 5px;
+  border-left: 1px solid rgba(200, 170, 110, 0.25);
+  border-bottom: 1px solid rgba(200, 170, 110, 0.25);
+}
+
+.rune-action-btn:hover {
+  background: rgba(200, 170, 110, 0.18);
+}
+
+.rune-action-img {
+  display: block;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.rune-action-badge {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #C8AA6E;
+  color: #060d1a;
+  font-size: 8px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  border: 1px solid rgba(0, 0, 0, 0.4);
+  pointer-events: none;
 }
 </style>

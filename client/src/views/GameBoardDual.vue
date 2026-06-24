@@ -447,6 +447,19 @@ const zoneCounts = computed(() => {
   return out
 })
 
+// Rune zone exhausted stats: maps "{playerId}_runes" → { exhausted, total }
+const runeStats = computed(() => {
+  const out: Record<string, { exhausted: number; total: number }> = {}
+  for (const card of allCards.value) {
+    if (card.zoneId !== 'runes') continue
+    const key = `${card.ownerId}_runes`
+    if (!out[key]) out[key] = { exhausted: 0, total: 0 }
+    out[key].total++
+    if (card.state.exhausted) out[key].exhausted++
+  }
+  return out
+})
+
 const stackCount = computed(() => allCards.value.filter(c => c.zoneId === 'stack').length)
 
 // ── Showdown panels ────────────────────────────────────────────────────────────
@@ -595,7 +608,7 @@ function bleedRect(rect: Rect): Rect {
           v-for="(rect, key) in zones"
           :key="key"
           :rect="rect"
-          :no-frame="parseZoneKey(String(key)).zone === 'battlefield'"
+          :no-frame="['battlefield', 'hand'].includes(parseZoneKey(String(key)).zone)"
           :drag-state="zoneDragState(String(key))"
           :hint="zoneDragHint(String(key))"
           :clickable="isClickableZone(String(key))"
@@ -617,7 +630,12 @@ function bleedRect(rect: Rect): Rect {
               {{ zoneLabel(String(key)) }}
             </span>
             <div class="zone-count" :class="labelSide(String(key)) === 'top' ? 'zone-count--top-right' : 'zone-count--bottom-left'">
-              {{ zoneCounts[String(key)] ?? 0 }}
+              <template v-if="parseZoneKey(String(key)).zone === 'runes' && runeStats[String(key)]">
+                {{ runeStats[String(key)].total - runeStats[String(key)].exhausted }}/{{ runeStats[String(key)].total }}
+              </template>
+              <template v-else>
+                {{ zoneCounts[String(key)] ?? 0 }}
+              </template>
             </div>
           </div>
 
