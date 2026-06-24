@@ -3,10 +3,10 @@ import type { Rect } from '@/types/card.type'
 
 defineProps<{
   rect: Rect
-  color?: string
   dragState?: 'valid' | 'invalid' | 'dim' | null
   clickable?: boolean
   hint?: string | null
+  noFrame?: boolean
 }>()
 </script>
 
@@ -24,12 +24,10 @@ defineProps<{
       top:    rect.y + 'px',
       width:  rect.w + 'px',
       height: rect.h + 'px',
-      ...(color ? {
-        '--zone-border': `color-mix(in srgb, ${color} 35%, transparent)`,
-        '--zone-bg':     `color-mix(in srgb, ${color} 6%, transparent)`,
-      } : {}),
     }"
   >
+    <div v-if="!noFrame" class="zone-frame" />
+    <div v-if="!noFrame" class="zone-bg" />
     <div
       v-if="hint"
       class="drop-hint"
@@ -43,36 +41,77 @@ defineProps<{
 <style scoped>
 .zone {
   position: fixed;
-  border: 1px solid var(--zone-border, rgba(255, 255, 255, 0.12));
-  background: var(--zone-bg, transparent);
-  border-radius: 6px;
-  transition: border-color 0.15s, background 0.15s;
+  border-radius: 2px;
+  transition: opacity 0.15s;
+}
+
+/* Subtle fill */
+.zone-bg {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.025);
+  transition: background 0.15s;
+}
+
+/* Gold corner brackets */
+.zone-frame {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(#C8AA6E, #C8AA6E) top    left  / 10px 1.5px no-repeat,
+    linear-gradient(#C8AA6E, #C8AA6E) top    left  / 1.5px 10px no-repeat,
+    linear-gradient(#C8AA6E, #C8AA6E) top    right / 10px 1.5px no-repeat,
+    linear-gradient(#C8AA6E, #C8AA6E) top    right / 1.5px 10px no-repeat,
+    linear-gradient(#C8AA6E, #C8AA6E) bottom left  / 10px 1.5px no-repeat,
+    linear-gradient(#C8AA6E, #C8AA6E) bottom left  / 1.5px 10px no-repeat,
+    linear-gradient(#C8AA6E, #C8AA6E) bottom right / 10px 1.5px no-repeat,
+    linear-gradient(#C8AA6E, #C8AA6E) bottom right / 1.5px 10px no-repeat;
+  opacity: 0.45;
+  transition: opacity 0.15s;
 }
 
 .zone--drag-dim {
-  border-color: rgba(255, 255, 255, 0.05);
-  opacity: 0.6;
+  opacity: 0.4;
 }
 
-.zone--drop-valid {
-  border-color: rgba(100, 200, 255, 0.8) !important;
-  background: rgba(100, 200, 255, 0.08) !important;
-  box-shadow: inset 0 0 0 1px rgba(100, 200, 255, 0.3);
+.zone--drop-valid .zone-bg {
+  background: rgba(100, 200, 255, 0.08);
+}
+.zone--drop-valid .zone-frame {
+  background:
+    linear-gradient(rgba(100,200,255,0.9), rgba(100,200,255,0.9)) top    left  / 10px 1.5px no-repeat,
+    linear-gradient(rgba(100,200,255,0.9), rgba(100,200,255,0.9)) top    left  / 1.5px 10px no-repeat,
+    linear-gradient(rgba(100,200,255,0.9), rgba(100,200,255,0.9)) top    right / 10px 1.5px no-repeat,
+    linear-gradient(rgba(100,200,255,0.9), rgba(100,200,255,0.9)) top    right / 1.5px 10px no-repeat,
+    linear-gradient(rgba(100,200,255,0.9), rgba(100,200,255,0.9)) bottom left  / 10px 1.5px no-repeat,
+    linear-gradient(rgba(100,200,255,0.9), rgba(100,200,255,0.9)) bottom left  / 1.5px 10px no-repeat,
+    linear-gradient(rgba(100,200,255,0.9), rgba(100,200,255,0.9)) bottom right / 10px 1.5px no-repeat,
+    linear-gradient(rgba(100,200,255,0.9), rgba(100,200,255,0.9)) bottom right / 1.5px 10px no-repeat;
+  opacity: 1;
 }
 
-.zone--drop-invalid {
-  border-color: rgba(255, 70, 70, 0.8) !important;
-  background: rgba(255, 70, 70, 0.08) !important;
-  box-shadow: inset 0 0 0 1px rgba(255, 70, 70, 0.3);
+.zone--drop-invalid .zone-bg {
+  background: rgba(255, 70, 70, 0.08);
+}
+.zone--drop-invalid .zone-frame {
+  background:
+    linear-gradient(rgba(255,70,70,0.9), rgba(255,70,70,0.9)) top    left  / 10px 1.5px no-repeat,
+    linear-gradient(rgba(255,70,70,0.9), rgba(255,70,70,0.9)) top    left  / 1.5px 10px no-repeat,
+    linear-gradient(rgba(255,70,70,0.9), rgba(255,70,70,0.9)) top    right / 10px 1.5px no-repeat,
+    linear-gradient(rgba(255,70,70,0.9), rgba(255,70,70,0.9)) top    right / 1.5px 10px no-repeat,
+    linear-gradient(rgba(255,70,70,0.9), rgba(255,70,70,0.9)) bottom left  / 10px 1.5px no-repeat,
+    linear-gradient(rgba(255,70,70,0.9), rgba(255,70,70,0.9)) bottom left  / 1.5px 10px no-repeat,
+    linear-gradient(rgba(255,70,70,0.9), rgba(255,70,70,0.9)) bottom right / 10px 1.5px no-repeat,
+    linear-gradient(rgba(255,70,70,0.9), rgba(255,70,70,0.9)) bottom right / 1.5px 10px no-repeat;
+  opacity: 1;
 }
 
-.zone--clickable {
-  cursor: pointer;
-}
-
-.zone--clickable:hover {
-  border-color: rgba(255, 255, 255, 0.35);
+.zone--clickable:hover .zone-bg {
   background: rgba(255, 255, 255, 0.04);
+}
+.zone--clickable:hover .zone-frame {
+  opacity: 0.75;
 }
 
 .drop-hint {
@@ -86,6 +125,7 @@ defineProps<{
   letter-spacing: 0.05em;
   text-transform: uppercase;
   pointer-events: none;
+  z-index: 2;
 }
 
 .drop-hint--valid   { color: rgba(100, 200, 255, 0.9); }

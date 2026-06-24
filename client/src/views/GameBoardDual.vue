@@ -7,6 +7,7 @@ import TokenCreationPanel from '@/components/game/TokenCreationPanel.vue'
 import DeckContextMenu from '@/components/game/DeckContextMenu.vue'
 import VisionTray from '@/components/game/VisionTray.vue'
 import RevealBanner from '@/components/game/RevealBanner.vue'
+import ShowdownPanel from '@/components/game/ShowdownPanel.vue'
 import { useGameStore } from '@/stores/game'
 import { useLayout, SEPARATOR } from '@/composables/useLayout'
 import { useViewport } from '@/composables/useViewport'
@@ -407,12 +408,12 @@ function onTokenZonePlus(key: string, event: MouseEvent) {
 // ── Zone labels & counts ───────────────────────────────────────────────────────
 
 const ZONE_DISPLAY: Record<string, string> = {
-  hand: 'Main', main_deck: 'Deck', discard: 'Défausse', banish: 'Exil',
+  hand: 'Main', main_deck: 'Deck', discard: 'Défausse', banish: 'Bannis',
   runes_deck: 'Runes', legend: 'Légende', champion: 'Champion',
   base: 'Base', runes: 'Runes', battlefield: 'Champ de bataille', stack: 'Stack',
 }
 
-const LABELED_ZONES = new Set(['runes_deck', 'legend', 'champion', 'main_deck', 'discard', 'banish', 'battlefield_owner', 'battlefield_opponent'])
+const LABELED_ZONES = new Set(['runes_deck', 'legend', 'champion', 'main_deck', 'discard', 'banish', 'battlefield_owner', 'battlefield_opponent', 'base', 'runes'])
 
 function zoneLabel(key: string): string {
   const { zone } = parseZoneKey(key)
@@ -425,9 +426,16 @@ function zoneLabel(key: string): string {
   return ZONE_DISPLAY[zone] ?? zone
 }
 
+// Deck-type zones: bottom for top player (opponent), top for bottom player (local).
+// All other labeled zones: always bottom (label sits on lower border).
+const DECK_ZONES = new Set(['runes_deck', 'main_deck', 'discard', 'banish'])
+
 function labelSide(key: string): 'top' | 'bottom' {
-  const { owner } = parseZoneKey(key)
-  return owner === store.myUid ? 'top' : 'bottom'
+  const { owner, zone } = parseZoneKey(key)
+  if (DECK_ZONES.has(zone)) {
+    return owner === store.myUid ? 'top' : 'bottom'
+  }
+  return 'bottom'
 }
 
 const zoneCounts = computed(() => {
@@ -440,6 +448,85 @@ const zoneCounts = computed(() => {
 })
 
 const stackCount = computed(() => allCards.value.filter(c => c.zoneId === 'stack').length)
+
+// ── Showdown panels ────────────────────────────────────────────────────────────
+
+type ShowdownPhase = 'idle' | 'showdown' | 'resolve'
+
+// keyed by the battlefield zone key (e.g. "uid:battlefield")
+const showdownPhases = ref<Record<string, ShowdownPhase>>({})
+// track dismissed battlefields so we don't re-open automatically
+const showdownDismissed = ref<Set<string>>(new Set())
+
+function showdownPhase(bfKey: string): ShowdownPhase {
+  return showdownPhases.value[bfKey] ?? 'idle'
+}
+
+// Describes the two showdown panels: one on my BF, one on opponent's BF
+const showdownPanels = computed(() => {
+  const myId = store.myUid
+  const oppId = store.opponents[0]
+  if (!myId || !oppId) return []
+
+  const out: Array<{
+    bfKey: string
+    rect: Rect
+    myCards: number
+    oppCards: number
+  }> = []
+
+  // My BF: my defending cards vs opponent's attacking cards
+  const myBFKey = `${myId}${SEPARATOR}battlefield`
+  const myBFRect = zones.value[myBFKey]
+  const myOwnerCount = zoneCounts.value[`${myId}_battlefield_owner`] ?? 0
+  const oppOnMyBF = zoneCounts.value[`${oppId}_battlefield_opponent`] ?? 0
+  if (myBFRect && myOwnerCount > 0 && !showdownDismissed.value.has(myBFKey)) {
+    out.push({ bfKey: myBFKey, rect: myBFRect, myCards: myOwnerCount, oppCards: oppOnMyBF })
+  }
+
+  // Opponent's BF: my attacking cards vs opponent's defending cards
+  const oppBFKey = `${oppId}${SEPARATOR}battlefield`
+  const oppBFRect = zones.value[oppBFKey]
+  const myOnOppBF = zoneCounts.value[`${myId}_battlefield_opponent`] ?? 0
+  const oppOwnerCount = zoneCounts.value[`${oppId}_battlefield_owner`] ?? 0
+  if (oppBFRect && myOnOppBF > 0 && !showdownDismissed.value.has(oppBFKey)) {
+    out.push({ bfKey: oppBFKey, rect: oppBFRect, myCards: myOnOppBF, oppCards: oppOwnerCount })
+  }
+
+  return out
+})
+
+function panelPos(rect: Rect): { x: number; y: number } {
+  return { x: rect.x + rect.w * 0.62 + 16, y: rect.y + rect.h / 2 }
+}
+
+function onStartShowdown(bfKey: string, hasOppCards: boolean) {
+  const myId = store.myUid ?? ''
+  const label = hasOppCards ? 'attaque un battlefield' : 'crée un showdown'
+  store.writeLog(`${store.actorName(myId)} ${label}`, myId)
+  showdownPhases.value = { ...showdownPhases.value, [bfKey]: 'showdown' }
+  // After a brief pause, move to resolve phase so the button appears
+  setTimeout(() => {
+    if (showdownPhases.value[bfKey] === 'showdown') {
+      showdownPhases.value = { ...showdownPhases.value, [bfKey]: 'resolve' }
+    }
+  }, 800)
+}
+
+function onConquer(bfKey: string) {
+  const myId = store.myUid ?? ''
+  const currentScore = store.myState?.score ?? 0
+  store.setScore(myId, currentScore + 1)
+  store.writeLog(`${store.actorName(myId)} conquiert le battlefield et marque 1 point`, myId)
+  showdownPhases.value = { ...showdownPhases.value, [bfKey]: 'idle' }
+  showdownDismissed.value = new Set([...showdownDismissed.value, bfKey])
+}
+
+function onCloseShowdown(bfKey: string) {
+  showdownPhases.value = { ...showdownPhases.value, [bfKey]: 'idle' }
+  showdownDismissed.value = new Set([...showdownDismissed.value, bfKey])
+}
+
 
 // ── Player colors ─────────────────────────────────────────────────────────────
 
@@ -497,18 +584,6 @@ function bleedRect(rect: Rect): Rect {
               top:    bleedRect(rect).y + 'px',
               width:  bleedRect(rect).w + 'px',
               height: bleedRect(rect).h + 'px',
-              '--player-color': colorOfPlayerId(playerIdFromKey(String(key)) ?? ''),
-            }"
-          />
-          <div
-            v-if="zones[bfKey(String(key))]"
-            class="player-battlefield"
-            :style="{
-              left:   zones[bfKey(String(key))].x + 'px',
-              top:    zones[bfKey(String(key))].y + 'px',
-              width:  zones[bfKey(String(key))].w + 'px',
-              height: zones[bfKey(String(key))].h + 'px',
-              '--player-color': colorOfPlayerId(playerIdFromKey(String(key)) ?? ''),
             }"
           />
         </template>
@@ -520,7 +595,7 @@ function bleedRect(rect: Rect): Rect {
           v-for="(rect, key) in zones"
           :key="key"
           :rect="rect"
-          :color="colorOfZoneKey(String(key))"
+          :no-frame="parseZoneKey(String(key)).zone === 'battlefield'"
           :drag-state="zoneDragState(String(key))"
           :hint="zoneDragHint(String(key))"
           :clickable="isClickableZone(String(key))"
@@ -683,6 +758,19 @@ function bleedRect(rect: Rect): Rect {
         @done="dismissReveal"
       />
 
+      <!-- Showdown panels (per battlefield) -->
+      <ShowdownPanel
+        v-for="panel in showdownPanels"
+        :key="panel.bfKey"
+        :phase="showdownPhase(panel.bfKey)"
+        :has-opponent-cards="panel.oppCards > 0"
+        :x="panelPos(panel.rect).x"
+        :y="panelPos(panel.rect).y"
+        @start-showdown="onStartShowdown(panel.bfKey, panel.oppCards > 0)"
+        @conquer="onConquer(panel.bfKey)"
+        @close="onCloseShowdown(panel.bfKey)"
+      />
+
       <!-- Token creation panel -->
       <TokenCreationPanel
         v-model:open="tokenPanelOpen"
@@ -715,16 +803,6 @@ function bleedRect(rect: Rect): Rect {
 
 .player-zone {
   position: fixed;
-  border: 1px solid color-mix(in srgb, var(--player-color) 30%, transparent);
-  background: color-mix(in srgb, var(--player-color) 3%, transparent);
-  border-radius: 6px;
-}
-
-.player-battlefield {
-  position: fixed;
-  border: 1px dashed color-mix(in srgb, var(--player-color) 40%, transparent);
-  background: color-mix(in srgb, var(--player-color) 6%, transparent);
-  border-radius: 4px;
 }
 
 .zones-layer {
@@ -791,19 +869,22 @@ function bleedRect(rect: Rect): Rect {
 /* Zone labels */
 .zone-name {
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
+  text-align: center;
   font-size: 9px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.45);
-  letter-spacing: 0.06em;
+  color: #6a8a90;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   white-space: nowrap;
   pointer-events: none;
+  line-height: 1;
+  user-select: none;
 }
 
-.zone-name--top    { top: 5px; }
-.zone-name--bottom { bottom: 5px; }
+.zone-name--top    { top: 3px; }
+.zone-name--bottom { bottom: 3px; }
 
 /* Card count badge */
 .zone-count {
