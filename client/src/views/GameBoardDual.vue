@@ -95,11 +95,8 @@ function onZoneClick(key: string) {
   store.applyAction(makeAction(owner, topCard.cardId, zone as ZoneId))
 }
 
-function resolveStack(key: string) {
-  const stackCards = allCards.value.filter(c => c.zoneId === 'stack')
-  for (const card of stackCards) {
-    store.applyAction({ type: 'DISCARD_CARD', playerId: card.controllerId, cardId: card.cardId, fromZoneId: 'stack' })
-  }
+function resolveStack() {
+  store.resolveStack()
 }
 
 function isClickableZone(key: string): boolean {
@@ -142,6 +139,8 @@ const zoneCounts = computed(() => {
   }
   return out
 })
+
+const stackCount = computed(() => allCards.value.filter(c => c.zoneId === 'stack').length)
 
 // ── Player colors ─────────────────────────────────────────────────────────────
 
@@ -259,12 +258,12 @@ function bleedRect(rect: Rect): Rect {
 
           <!-- Résoudre button for stack zone -->
           <div
-            v-if="parseZoneKey(String(key)).zone === 'stack' && (zoneCounts[String(key)] ?? 0) > 0"
+            v-if="parseZoneKey(String(key)).zone === 'stack' && stackCount > 0"
             class="zone-overlay"
-            style="pointer-events: auto"
+            style="pointer-events: none"
             :style="{ left: rect.x + 'px', top: rect.y + 'px', width: rect.w + 'px', height: rect.h + 'px' }"
           >
-            <button class="resolve-btn" @click="resolveStack(String(key))">Résoudre</button>
+            <button class="resolve-btn" style="pointer-events: auto" @click="resolveStack()">Résoudre</button>
           </div>
 
         </template>
@@ -379,25 +378,25 @@ function bleedRect(rect: Rect): Rect {
 /* Resolve stack button */
 .resolve-btn {
   position: absolute;
-  bottom: 6px;
+  bottom: 10px;
   left: 50%;
   transform: translateX(-50%);
-  padding: 4px 10px;
-  border-radius: 4px;
-  border: 1px solid rgba(255, 200, 80, 0.6);
-  background: rgba(255, 180, 40, 0.15);
-  color: rgba(255, 210, 100, 0.95);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  padding: 10px 20px;
+  border: 1px solid rgba(200, 170, 110, 0.5);
+  background: rgba(200, 170, 110, 0.08);
+  color: #C8AA6E;
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
 .resolve-btn:hover {
-  background: rgba(255, 180, 40, 0.3);
-  border-color: rgba(255, 200, 80, 0.9);
+  background: rgba(200, 170, 110, 0.15);
+  border-color: #C8AA6E;
+  color: #F2E5CD;
 }
 </style>

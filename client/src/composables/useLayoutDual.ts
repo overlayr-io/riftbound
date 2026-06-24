@@ -167,23 +167,23 @@ export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
     if (cw > maxW) { cw = maxW; ch = Math.round(cw * (cardH.value / cardW.value)) }
 
     const MAX_VISIBLE = 6
-    const ANGLE_STEP = -10
+    const ANGLE_STEP  = -10
 
-    const start = Math.max(0, n - MAX_VISIBLE)
+    const visible = n <= MAX_VISIBLE ? cards : cards.slice(n - MAX_VISIBLE)
+    const count   = visible.length
     const cx = zone.x + (zone.w - cw) / 2
     const cy = zone.y + (zone.h - ch) / 2
 
-    for (let i = 0; i < n; i++) {
-      if (i < start) continue
-      const depthFromTop = n - 1 - i
-      out.set(cards[i].cardId, {
+    visible.forEach((card, i) => {
+      const distFromTop = count - 1 - i  // 0 = top card (straight), grows going back
+      out.set(card.cardId, {
         x: cx, y: cy,
         w: cw, h: ch,
         rotation: 0,
-        cssRotation: depthFromTop * ANGLE_STEP,
+        cssRotation: distFromTop * ANGLE_STEP,
         z: i,
       })
-    }
+    })
   }
 
   // ── Zones ─────────────────────────────────────────────────────────────────────
@@ -309,7 +309,10 @@ export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
     const groups = new Map<string, CardState[]>()
     for (const c of cardList) {
       if (childIds.has(c.cardId)) continue  // skip grouped children from zone layout
-      const key = `${c.ownerId}${SEPARATOR}${c.zoneId}`
+      // Stack is owner-agnostic: all cards share one group so they all get the same rotation
+      const key = c.zoneId === 'stack'
+        ? 'stack'
+        : `${c.ownerId}${SEPARATOR}${c.zoneId}`
       let list = groups.get(key)
       if (!list) groups.set(key, (list = []))
       list.push(c)

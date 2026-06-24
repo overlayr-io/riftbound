@@ -239,6 +239,40 @@ export const useGameStore = defineStore('game', () => {
     return 'ALL'
   }
 
+  function resolveStack() {
+    const round = currentRound.value
+    if (!round) return
+    const ref = roundRef()
+    if (!ref) return
+
+    const stackCards = Object.values(round.cards).filter(c => c.zoneId === 'stack')
+    if (!stackCards.length) return
+
+    // Pick the top card (highest order = last played)
+    const card = stackCards.reduce((a, b) => a.order > b.order ? a : b)
+
+    const discardCards = Object.values(round.cards).filter(c => c.zoneId === 'discard')
+    const newOrder = Math.max(-1, ...discardCards.map(c => c.order)) + 1
+
+    const updated: CardState = {
+      ...card,
+      zoneId: 'discard',
+      order: newOrder,
+      state: { ...card.state, visibleTo: 'ALL', exhausted: false, groupTo: [] },
+    }
+    round.cards[card.cardId] = updated
+
+    updateDoc(ref, {
+      [`cards.${card.cardId}.zoneId`]:          'discard',
+      [`cards.${card.cardId}.order`]:           newOrder,
+      [`cards.${card.cardId}.state.visibleTo`]: 'ALL',
+      [`cards.${card.cardId}.state.exhausted`]: false,
+      [`cards.${card.cardId}.state.groupTo`]:   [],
+      _updatedBy: sessionId,
+      updatedAt: serverTimestamp(),
+    }).catch(console.error)
+  }
+
   function sendToDeck(cardId: string, deckZone: ZoneId, position: 'top' | 'bottom') {
     const round = currentRound.value
     if (!round?.cards[cardId]) return
@@ -506,6 +540,7 @@ export const useGameStore = defineStore('game', () => {
     attachGame,
     detach,
     sendToDeck,
+    resolveStack,
     importDeck,
     selectBattlefield,
     rollDice,
