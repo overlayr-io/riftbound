@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { computed, provide, ref, onMounted, onUnmounted } from 'vue'
+import { computed, provide, ref, watch, onMounted, onUnmounted } from 'vue'
 import GameSidebarDual from '@/components/game/GameSidebarDual.vue'
 import CardView from '@/components/game/CardView.vue'
 import ZoneView from '@/components/game/ZoneView.vue'
@@ -16,7 +16,7 @@ import { useBoardShortcuts } from '@/composables/useBoardShortcuts'
 import { useGamePingArrow, PING_ARROW_KEY } from '@/composables/useGamePingArrow'
 import { useDeckVision } from '@/composables/useDeckVision'
 import type { Rect } from '@/types/card.type'
-import type { CardState, CardType, GameAction, ZoneId } from '@riftbound/shared'
+import type { CardState, CardType, GameAction, ShowdownData, ZoneId } from '@riftbound/shared'
 
 const store = useGameStore()
 const { width: vw, height: vh } = useViewport()
@@ -84,6 +84,11 @@ function onKeyDown(e: KeyboardEvent) {
   }
   const tag = (e.target as HTMLElement).tagName
   if (tag === 'INPUT' || tag === 'TEXTAREA') return
+  if (e.key === ' ') {
+    e.preventDefault()
+    if (store.isMyTurn) store.endTurn()
+    return
+  }
   if (e.key === 't') {
     if (tokenPanelOpen.value) {
       tokenPanelOpen.value = false
@@ -522,81 +527,78 @@ const runeStats = computed(() => {
 const stackCount = computed(() => allCards.value.filter(c => c.zoneId === 'stack').length)
 
 // ── Showdown panels ────────────────────────────────────────────────────────────
+// Stored in Firestore → both players see the same state in real-time.
+// Auto-created when I move cards onto the opponent's battlefield (I'm the attacker).
 
-type ShowdownPhase = 'idle' | 'showdown' | 'resolve'
-
-// keyed by the battlefield zone key (e.g. "uid:battlefield")
-const showdownPhases = ref<Record<string, ShowdownPhase>>({})
-// track dismissed battlefields so we don't re-open automatically
-const showdownDismissed = ref<Set<string>>(new Set())
-
-function showdownPhase(bfKey: string): ShowdownPhase {
-  return showdownPhases.value[bfKey] ?? 'idle'
-}
-
-// Describes the two showdown panels: one on my BF, one on opponent's BF
 const showdownPanels = computed(() => {
   const myId = store.myUid
   const oppId = store.opponents[0]
   if (!myId || !oppId) return []
 
-  const out: Array<{
-    bfKey: string
-    rect: Rect
-    myCards: number
-    oppCards: number
-  }> = []
-
-  // My BF: my defending cards vs opponent's attacking cards
-  const myBFKey = `${myId}${SEPARATOR}battlefield`
-  const myBFRect = zones.value[myBFKey]
-  const myOwnerCount = zoneCounts.value[`${myId}_battlefield_owner`] ?? 0
-  const oppOnMyBF = zoneCounts.value[`${oppId}_battlefield_opponent`] ?? 0
-  if (myBFRect && myOwnerCount > 0 && !showdownDismissed.value.has(myBFKey)) {
-    out.push({ bfKey: myBFKey, rect: myBFRect, myCards: myOwnerCount, oppCards: oppOnMyBF })
-  }
-
-  // Opponent's BF: my attacking cards vs opponent's defending cards
-  const oppBFKey = `${oppId}${SEPARATOR}battlefield`
-  const oppBFRect = zones.value[oppBFKey]
-  const myOnOppBF = zoneCounts.value[`${myId}_battlefield_opponent`] ?? 0
-  const oppOwnerCount = zoneCounts.value[`${oppId}_battlefield_owner`] ?? 0
-  if (oppBFRect && myOnOppBF > 0 && !showdownDismissed.value.has(oppBFKey)) {
-    out.push({ bfKey: oppBFKey, rect: oppBFRect, myCards: myOnOppBF, oppCards: oppOwnerCount })
-  }
-
-  return out
+  return Object.entries(store.currentRound?.showdowns ?? {})
+    .map(([bfOwnerId, sd]) => {
+      const rect = zones.value[`${bfOwnerId}${SEPARATOR}battlefield`]
+      if (!rect) return null
+      const oppIdInSd = sd.attackerId === myId ? sd.bfOwnerId : sd.attackerId
+      return { bfOwnerId, rect, sd, opponentName: store.actorName(oppIdInSd) }
+    })
+    .filter((p): p is NonNullable<typeof p> => p !== null)
 })
 
 function panelPos(rect: Rect): { x: number; y: number } {
   return { x: rect.x + rect.w * 0.62 + 16, y: rect.y + rect.h / 2 }
 }
 
-function onStartShowdown(bfKey: string, hasOppCards: boolean) {
+// Auto-create showdown when I move cards to opponent's BF (I = attacker, I go first)
+watch(
+  () => {
+    const myId = store.myUid
+    const oppId = store.opponents[0]
+    if (!myId || !oppId) return 0
+    return zoneCounts.value[`${myId}_battlefield_opponent`] ?? 0
+  },
+  (count) => {
+    const myId = store.myUid
+    const oppId = store.opponents[0]
+    if (!myId || !oppId || count === 0) return
+    if (store.currentRound?.showdowns?.[oppId]) return  // already exists
+
+    store.writeLog(`${store.actorName(myId)} attaque le battlefield`, myId)
+    store.setShowdown(oppId, {
+      bfOwnerId: oppId,
+      attackerId: myId,
+      currentTurnId: myId,   // attacker has focus first
+      passCount: 0,
+      ended: false,
+      startedAt: Date.now(),
+    })
+  },
+)
+
+function onPass(sd: ShowdownData) {
   const myId = store.myUid ?? ''
-  const label = hasOppCards ? 'attaque un battlefield' : 'crée un showdown'
-  store.writeLog(`${store.actorName(myId)} ${label}`, myId)
-  showdownPhases.value = { ...showdownPhases.value, [bfKey]: 'showdown' }
-  // After a brief pause, move to resolve phase so the button appears
-  setTimeout(() => {
-    if (showdownPhases.value[bfKey] === 'showdown') {
-      showdownPhases.value = { ...showdownPhases.value, [bfKey]: 'resolve' }
-    }
-  }, 800)
+  const opponent = sd.currentTurnId === sd.attackerId ? sd.bfOwnerId : sd.attackerId
+  const nextPass = sd.passCount + 1
+
+  store.writeLog(`${store.actorName(myId)} passe`, myId)
+
+  if (nextPass >= 2) {
+    store.writeLog('Showdown terminé', null)
+    store.setShowdown(sd.bfOwnerId, { ...sd, passCount: 2, ended: true })
+  } else {
+    store.setShowdown(sd.bfOwnerId, { ...sd, passCount: nextPass, currentTurnId: opponent })
+  }
 }
 
-function onConquer(bfKey: string) {
+function onConquer(sd: ShowdownData) {
   const myId = store.myUid ?? ''
-  const currentScore = store.myState?.score ?? 0
-  store.setScore(myId, currentScore + 1)
+  store.setScore(myId, (store.myState?.score ?? 0) + 1)
   store.writeLog(`${store.actorName(myId)} conquiert le battlefield et marque 1 point`, myId)
-  showdownPhases.value = { ...showdownPhases.value, [bfKey]: 'idle' }
-  showdownDismissed.value = new Set([...showdownDismissed.value, bfKey])
+  store.clearShowdown(sd.bfOwnerId)
 }
 
-function onCloseShowdown(bfKey: string) {
-  showdownPhases.value = { ...showdownPhases.value, [bfKey]: 'idle' }
-  showdownDismissed.value = new Set([...showdownDismissed.value, bfKey])
+function onCloseShowdown(sd: ShowdownData) {
+  store.clearShowdown(sd.bfOwnerId)
 }
 
 
@@ -838,17 +840,18 @@ function bleedRect(rect: Rect): Rect {
         @done="dismissReveal"
       />
 
-      <!-- Showdown panels (per battlefield) -->
+      <!-- Showdown panels (synced via Firestore, auto-created on move) -->
       <ShowdownPanel
         v-for="panel in showdownPanels"
-        :key="panel.bfKey"
-        :phase="showdownPhase(panel.bfKey)"
-        :has-opponent-cards="panel.oppCards > 0"
+        :key="'sd-' + panel.bfOwnerId"
+        :showdown="panel.sd"
+        :my-id="store.myUid ?? ''"
+        :opponent-name="panel.opponentName"
         :x="panelPos(panel.rect).x"
         :y="panelPos(panel.rect).y"
-        @start-showdown="onStartShowdown(panel.bfKey, panel.oppCards > 0)"
-        @conquer="onConquer(panel.bfKey)"
-        @close="onCloseShowdown(panel.bfKey)"
+        @pass="onPass(panel.sd)"
+        @conquer="onConquer(panel.sd)"
+        @close="onCloseShowdown(panel.sd)"
       />
 
       <!-- Token creation panel -->
@@ -1132,4 +1135,5 @@ function bleedRect(rect: Rect): Rect {
   border-color: #C8AA6E;
   color: #F2E5CD;
 }
+
 </style>

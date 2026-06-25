@@ -3,6 +3,17 @@ import {LobbyType} from "./lobby";
 import {CardId, CardState, DeckList} from "./card";
 
 export type GameMode = 'dual' | '2v2' | 'FFA'
+
+// ── Showdown ──────────────────────────────────────────────────────────────────
+
+export interface ShowdownData {
+  bfOwnerId: PlayerId     // owner of the BF (defender)
+  attackerId: PlayerId    // who moved cards here (has focus first)
+  currentTurnId: PlayerId // whose turn it is
+  passCount: number       // consecutive passes — 2 = conquer
+  ended: boolean
+  startedAt: number
+}
 export type GameMatchFormat = 'BO1' | 'BO3' | 'BO5'
 export type GameDeckFormat = 'constructed' | 'sealed' | 'learn_to_play'
 export const MAX_PLAYERS_BY_MODE: Record<GameMode, number> = {
@@ -75,6 +86,7 @@ export interface GameRound {
 
   players: Record<PlayerId, PlayerState>
   cards: Record<CardId, CardState>
+  showdowns?: Record<string, ShowdownData>   // keyed by bfOwnerId
 
   updatedAt: Date
   endedAt: Date | null

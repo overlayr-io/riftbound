@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { doc, addDoc, collection, onSnapshot, updateDoc, serverTimestamp, deleteField, type Unsubscribe } from 'firebase/firestore'
-import type { Card, CardState, CardType, CardVisibleTo, DeckList, GameAction, GameMode, GameMatchFormat, GameDeckFormat, GameRound, ZoneId } from '@riftbound/shared'
+import type { Card, CardState, CardType, CardVisibleTo, DeckList, GameAction, GameMode, GameMatchFormat, GameDeckFormat, GameRound, ShowdownData, ZoneId } from '@riftbound/shared'
 import type { PlayerId } from '@riftbound/shared'
 import { firestore } from '@/firebase'
 import { useAuthStore } from './auth'
@@ -108,6 +108,7 @@ export const useGameStore = defineStore('game', () => {
           currentTurn: d.currentTurn ?? null,
           players: d.players ?? {},
           cards: d.cards ?? {},
+          showdowns: d.showdowns ?? {},
           updatedAt: d.updatedAt?.toDate() ?? new Date(),
           endedAt: d.endedAt?.toDate() ?? null,
         }
@@ -761,6 +762,171 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  function setShowdown(bfOwnerId: string, data: ShowdownData) {
+    const round = currentRound.value
+    const ref = roundRef()
+    if (!round || !ref) return
+    round.showdowns = { ...(round.showdowns ?? {}), [bfOwnerId]: data }
+    updateDoc(ref, {
+      [`showdowns.${bfOwnerId}`]: data,
+      _updatedBy: sessionId,
+      updatedAt: serverTimestamp(),
+    }).catch(console.error)
+  }
+
+  function clearShowdown(bfOwnerId: string) {
+    const round = currentRound.value
+    const ref = roundRef()
+    if (!round || !ref) return
+    const next = { ...(round.showdowns ?? {}) }
+    delete next[bfOwnerId]
+    round.showdowns = next
+    updateDoc(ref, {
+      [`showdowns.${bfOwnerId}`]: deleteField(),
+      _updatedBy: sessionId,
+      updatedAt: serverTimestamp(),
+    }).catch(console.error)
+  }
+
+  // ── Turn number of the last ABCD we ran (per session, resets on page reload) ─
+  const _lastAutoTurn = ref(-1)
+
+  function _doABCD(uid: string) {
+    const round = currentRound.value
+    const ref   = roundRef()
+    if (!round || !ref) return
+
+    const updates: Record<string, unknown> = {}
+
+    // A. Awaken: unexhaust all my cards
+    for (const [id, card] of Object.entries(round.cards)) {
+      if (card.ownerId !== uid || !card.state.exhausted) continue
+      round.cards[id] = { ...card, state: { ...card.state, exhausted: false } }
+      updates[`cards.${id}.state.exhausted`] = false
+    }
+
+    // C. Channel: top 2 cards from runes_deck → runes
+    const runesDeck = Object.values(round.cards)
+      .filter(c => c.ownerId === uid && c.zoneId === 'runes_deck')
+      .sort((a, b) => b.order - a.order)
+    const toChannel = runesDeck.slice(0, 2)
+    const nextRuneOrder = Math.max(-1, ...Object.values(round.cards)
+      .filter(c => c.ownerId === uid && c.zoneId === 'runes')
+      .map(c => c.order)) + 1
+    toChannel.forEach((card, i) => {
+      const newOrder = nextRuneOrder + i
+      round.cards[card.cardId] = { ...card, zoneId: 'runes', order: newOrder, state: { ...card.state, visibleTo: 'ALL' } }
+      updates[`cards.${card.cardId}.zoneId`]          = 'runes'
+      updates[`cards.${card.cardId}.order`]           = newOrder
+      updates[`cards.${card.cardId}.state.visibleTo`] = 'ALL'
+    })
+
+    // D. Draw: top card from main_deck → hand
+    const topDeck = Object.values(round.cards)
+      .filter(c => c.ownerId === uid && c.zoneId === 'main_deck')
+      .sort((a, b) => b.order - a.order)[0]
+    if (topDeck) {
+      const drawOrder = Math.max(-1, ...Object.values(round.cards)
+        .filter(c => c.ownerId === uid && c.zoneId === 'hand')
+        .map(c => c.order)) + 1
+      round.cards[topDeck.cardId] = { ...topDeck, zoneId: 'hand', order: drawOrder, state: { ...topDeck.state, visibleTo: 'SELF' } }
+      updates[`cards.${topDeck.cardId}.zoneId`]          = 'hand'
+      updates[`cards.${topDeck.cardId}.order`]           = drawOrder
+      updates[`cards.${topDeck.cardId}.state.visibleTo`] = 'SELF'
+    }
+
+    if (Object.keys(updates).length) {
+      updates['_updatedBy'] = sessionId
+      updates['updatedAt']  = serverTimestamp()
+      updateDoc(ref, updates).catch(console.error)
+    }
+  }
+
+  function _doInitialDraw(uid: string) {
+    const round = currentRound.value
+    const ref   = roundRef()
+    if (!round || !ref) return
+
+    // Guard: skip if already have cards in hand (reconnect)
+    const alreadyInHand = Object.values(round.cards).filter(c => c.ownerId === uid && c.zoneId === 'hand').length
+    if (alreadyInHand > 0) return
+
+    const top4 = Object.values(round.cards)
+      .filter(c => c.ownerId === uid && c.zoneId === 'main_deck')
+      .sort((a, b) => b.order - a.order)
+      .slice(0, 4)
+
+    const updates: Record<string, unknown> = {}
+    top4.forEach((card, i) => {
+      round.cards[card.cardId] = { ...card, zoneId: 'hand', order: i, state: { ...card.state, visibleTo: 'SELF' } }
+      updates[`cards.${card.cardId}.zoneId`]          = 'hand'
+      updates[`cards.${card.cardId}.order`]           = i
+      updates[`cards.${card.cardId}.state.visibleTo`] = 'SELF'
+    })
+
+    // First player initialises currentTurn so the ABCD watch fires for them
+    if (round.firstPlayerId === uid && !round.currentTurn) {
+      const ct = { playerId: uid, turn: 1 }
+      round.currentTurn = ct
+      updates['currentTurn'] = ct
+    }
+
+    updates['_updatedBy'] = sessionId
+    updates['updatedAt']  = serverTimestamp()
+    updateDoc(ref, updates).catch(console.error)
+    writeLog(`${actorName(uid)} pioche sa main initiale`, uid)
+  }
+
+  const isMyTurn = computed(() =>
+    currentRound.value?.setup === 'completed' &&
+    currentRound.value?.currentTurn?.playerId === myUid.value,
+  )
+
+  // Auto: initial 4-card draw when setup completes
+  watch(
+    () => currentRound.value?.setup,
+    (setup) => {
+      const uid = myUid.value
+      if (setup === 'completed' && uid) _doInitialDraw(uid)
+    },
+  )
+
+  // Auto: ABCD when my turn starts
+  watch(
+    () => currentRound.value?.currentTurn,
+    (turn) => {
+      const uid = myUid.value
+      if (!turn || !uid) return
+      if (turn.playerId !== uid) return
+      if (turn.turn <= _lastAutoTurn.value) return   // already processed (reconnect guard)
+      _lastAutoTurn.value = turn.turn
+      _doABCD(uid)
+      writeLog(`${actorName(uid)} commence son tour`, uid)
+    },
+  )
+
+  function endTurn() {
+    const round = currentRound.value
+    const ref   = roundRef()
+    const uid   = myUid.value
+    if (!round || !ref || !uid) return
+    if (round.currentTurn?.playerId !== uid) return   // not your turn
+
+    const allIds  = Object.keys(round.players)
+    const idx     = allIds.indexOf(uid)
+    const nextId  = allIds[(idx + 1) % allIds.length]
+    const nextNum = (round.currentTurn?.turn ?? 0) + 1
+
+    round.currentTurn = { playerId: nextId, turn: nextNum }
+    updateDoc(ref, {
+      currentTurn: { playerId: nextId, turn: nextNum },
+      _updatedBy: sessionId,
+      updatedAt: serverTimestamp(),
+    }).catch(console.error)
+
+    writeLog(`${actorName(uid)} passe le tour`, uid)
+  }
+
   function setScore(playerId: PlayerId, score: number) {
     const round = currentRound.value
     const ref = roundRef()
@@ -816,6 +982,10 @@ export const useGameStore = defineStore('game', () => {
     addToStack,
     destroyToken,
     setScore,
+    setShowdown,
+    clearShowdown,
     shuffleDeck,
+    endTurn,
+    isMyTurn,
   }
 })
