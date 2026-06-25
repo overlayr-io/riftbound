@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useGameStore } from '@/stores/game'
 import { useViewport } from '@/composables/useViewport.ts'
 import { useGameEmote } from '@/composables/useGameEmote'
@@ -43,9 +44,12 @@ const showQuitConfirm = ref(false)
 const showNextRound = ref(false)
 const nextRoundLoading = ref(false)
 
-function confirmLeave() {
+const router = useRouter()
+
+async function confirmLeave() {
   showQuitConfirm.value = false
-  // TODO: leave room + router.push('/')
+  await gameStore.leaveVoluntarily()
+  router.push('/')
 }
 
 async function confirmNextRound(winnerId: string) {

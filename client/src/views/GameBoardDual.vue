@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import { computed, provide, ref, watch, onMounted, onUnmounted } from 'vue'
 import GameSidebarDual from '@/components/game/GameSidebarDual.vue'
+import GamePresenceOverlay from '@/components/game/GamePresenceOverlay.vue'
 import CardView from '@/components/game/CardView.vue'
 import ZoneView from '@/components/game/ZoneView.vue'
 import TokenCreationPanel from '@/components/game/TokenCreationPanel.vue'
@@ -9,6 +10,7 @@ import VisionTray from '@/components/game/VisionTray.vue'
 import RevealBanner from '@/components/game/RevealBanner.vue'
 import ShowdownPanel from '@/components/game/ShowdownPanel.vue'
 import { useGameStore } from '@/stores/game'
+import { usePlayerPresence } from '@/composables/usePlayerPresence'
 import { useLayout, SEPARATOR } from '@/composables/useLayout'
 import { useViewport } from '@/composables/useViewport'
 import { useDrag, DRAG_KEY, GAME_ACTIONS_KEY } from '@/composables/useDrag'
@@ -20,6 +22,24 @@ import type { CardState, CardType, GameAction, ShowdownData, ZoneId } from '@rif
 
 const store = useGameStore()
 const { width: vw, height: vh } = useViewport()
+
+// ── Player presence ───────────────────────────────────────────────────────────
+const { statusOf } = usePlayerPresence(
+  () => store.gameId,
+  () => store.myUid,
+  () => store.playerIds,
+)
+
+const absentOpponent = computed(() => {
+  const opp = store.opponents[0]
+  if (!opp) return null
+  const name = store.playerNames[opp]?.name ?? opp.slice(0, 6)
+  // Voluntary quit takes priority over connection status
+  if (store.leftPlayers.includes(opp)) return { name, status: 'gone' as const }
+  const s = statusOf(opp)
+  if (s !== 'online') return { name, status: s }
+  return null
+})
 
 // ── Ping & Arrows ─────────────────────────────────────────────────────────────
 
@@ -861,6 +881,13 @@ function bleedRect(rect: Rect): Rect {
         :y="tokenPanelY"
         :target-zone="tokenPanelZone"
         @create="onTokenCreate"
+      />
+
+      <!-- Presence overlay (opponent disconnected / left) -->
+      <GamePresenceOverlay
+        v-if="absentOpponent"
+        :player-name="absentOpponent.name"
+        :status="absentOpponent.status"
       />
 
       <!-- Arrow mode confirm button (z:10) -->

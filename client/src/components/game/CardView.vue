@@ -5,9 +5,13 @@ import type { CardLayout } from '@/types/card.type'
 import { DRAG_KEY, GAME_ACTIONS_KEY } from '@/composables/useDrag'
 import { useBoardShortcuts } from '@/composables/useBoardShortcuts'
 import { PING_ARROW_KEY, type PingArrowContext } from '@/composables/useGamePingArrow'
+import { useCardZoom } from '@/composables/useCardZoom'
 import cardBack from '@/assets/img/card_back.png'
 import runeIcon from '@/assets/img/rune_icon.png'
 import CardContextMenu from '@/components/game/CardContextMenu.vue'
+import CardZoomPopup from '@/components/game/CardZoomPopup.vue'
+
+const { zoom, showZoom, hideZoom } = useCardZoom()
 
 const props = defineProps<{
   card: CardState
@@ -78,7 +82,7 @@ const style = computed(() => {
       zIndex: L.z,
       opacity: runeTokenOpacity.value,
       filter: stackCopyFilter.value,
-      transition: 'transform 0.3s var(--ease)',
+      transition: 'transform var(--ease-duration) var(--ease)',
     }
   }
 
@@ -235,8 +239,8 @@ function onContextMenu(e: MouseEvent) {
     @pointerdown="onPointerDown"
     @click="onClick"
     @contextmenu="onContextMenu"
-    @mouseenter="isHovered = true"
-    @mouseleave="isHovered = false"
+    @mouseenter="(e) => { isHovered = true; if (canSeeFront && card.description.imageUrl) showZoom(card.description.imageUrl, e.currentTarget as Element) }"
+    @mouseleave="() => { isHovered = false; hideZoom() }"
   >
     <div class="card-inner" :style="innerStyle">
       <img
@@ -322,6 +326,8 @@ function onContextMenu(e: MouseEvent) {
     :current-player-id="currentPlayerId"
     @close="ctxVisible = false"
   />
+
+  <CardZoomPopup :zoom="zoom" />
 </template>
 
 <style scoped>
@@ -335,7 +341,7 @@ function onContextMenu(e: MouseEvent) {
   will-change: transform;
   transform-origin: 50% 50%;
   perspective: 800px;
-  transition: transform 0.5s var(--ease);
+  transition: transform var(--ease-duration) var(--ease);
 }
 
 .card.dragging {
@@ -348,7 +354,7 @@ function onContextMenu(e: MouseEvent) {
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
-  transition: transform 0.7s var(--ease);
+  transition: transform calc(var(--ease-duration) * 1.6) var(--ease);
 }
 
 .card-face {

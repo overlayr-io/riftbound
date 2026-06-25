@@ -3,7 +3,11 @@ import { ref, computed, watch } from 'vue'
 import type { Card, DeckList, GameSetupStep } from '@riftbound/shared'
 import TitleOrnament from './TitleOrnament.vue'
 import ActionButton from './ActionButton.vue'
+import CardZoomPopup from './game/CardZoomPopup.vue'
 import backCardBlack from '@/assets/img/back_card_black.png'
+import { useCardZoom } from '@/composables/useCardZoom'
+
+const { zoom, showZoom, hideZoom } = useCardZoom()
 
 const props = defineProps<{
   setup: GameSetupStep
@@ -238,6 +242,8 @@ function usedBfRound(bfId: string): number | null {
               :key="card.baseCardId"
               class="sb-row sb-row--main"
               @click="moveToSideboard(card.baseCardId)"
+              @mouseenter="card.imageUrl && showZoom(card.imageUrl, $event.currentTarget as Element)"
+              @mouseleave="hideZoom"
             >
               <span class="sb-row__arrow">→</span>
               <span class="sb-row__count">×{{ count }}</span>
@@ -260,6 +266,8 @@ function usedBfRound(bfId: string): number | null {
               :key="card.baseCardId"
               class="sb-row sb-row--side"
               @click="moveToMain(card.baseCardId)"
+              @mouseenter="card.imageUrl && showZoom(card.imageUrl, $event.currentTarget as Element)"
+              @mouseleave="hideZoom"
             >
               <span class="sb-row__arrow">←</span>
               <span class="sb-row__count">×{{ count }}</span>
@@ -316,6 +324,8 @@ function usedBfRound(bfId: string): number | null {
           }"
           :disabled="usedBfRound(bf.id) !== null"
           @click="usedBfRound(bf.id) === null && (selectedBFId = bf.id, emit('selectBattlefield', bf))"
+          @mouseenter="bf.imageUrl && showZoom(bf.imageUrl, $event.currentTarget as Element)"
+          @mouseleave="hideZoom"
         >
           <div class="bf-card__img">
             <img v-if="bf.imageUrl" :src="bf.imageUrl" :alt="bf.name" class="bf-card__img-el" />
@@ -545,6 +555,8 @@ function usedBfRound(bfId: string): number | null {
           }"
           :disabled="myMulliganDone"
           @click="toggleMulliganCard(card.id)"
+          @mouseenter="card.imageUrl && showZoom(card.imageUrl, $event.currentTarget as Element)"
+          @mouseleave="hideZoom"
         >
           <img
             :src="card.imageUrl || 'https://cdn.piltoverarchive.com/cards/OGN-169.webp?width=95'"
@@ -609,6 +621,8 @@ function usedBfRound(bfId: string): number | null {
       <p class="waiting-zone__msg">Étape en cours de chargement…</p>
     </div>
   </template>
+
+  <CardZoomPopup :zoom="zoom" />
 </template>
 
 <style scoped>
@@ -789,7 +803,8 @@ function usedBfRound(bfId: string): number | null {
 .bf-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 0.6rem;
+  gap: 0.75rem;
+  padding: 0 0.5rem;
 }
 
 .bf-card {
@@ -942,8 +957,8 @@ function usedBfRound(bfId: string): number | null {
 }
 
 .sb-row__img {
-  width: 20px;
-  height: 20px;
+  width: 30px;
+  height: 42px;
   object-fit: contain;
   border-radius: 2px;
   flex-shrink: 0;
@@ -1283,7 +1298,7 @@ function usedBfRound(bfId: string): number | null {
 .mulligan-card {
   position: relative;
   flex: 1;
-  max-width: 120px;
+  max-width: 150px;
   aspect-ratio: 0.714;
   background: rgba(6, 15, 27, 0.8);
   border: 1px solid rgba(90, 110, 130, 0.3);

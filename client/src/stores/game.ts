@@ -22,6 +22,7 @@ export const useGameStore = defineStore('game', () => {
   const playerIds = ref<PlayerId[]>([])
   const playerNames = ref<Record<PlayerId, { name: string; teamId: '1' | '2' | null }>>({})
   const roundResults = ref<{ round: number; winnerId: PlayerId }[]>([])
+  const leftPlayers = ref<PlayerId[]>([])
   const currentRoundId = ref<string | null>(null)
 
   // ── Current round ────────────────────────────────────────────────────────────
@@ -144,6 +145,7 @@ export const useGameStore = defineStore('game', () => {
         playerIds.value = d.playerIds ?? []
         playerNames.value = d.playerNames ?? {}
         roundResults.value = d.roundResults ?? []
+        leftPlayers.value = d.leftPlayers ?? []
 
         const newRoundId: string = d.currentRoundId
         if (newRoundId && newRoundId !== currentRoundId.value) {
@@ -167,6 +169,7 @@ export const useGameStore = defineStore('game', () => {
     playerIds.value = []
     playerNames.value = {}
     roundResults.value = []
+    leftPlayers.value = []
     myDeck.value = null
     importing.value = false
     importError.value = null
@@ -636,9 +639,30 @@ export const useGameStore = defineStore('game', () => {
         commitMove(action.cardId, 'runes', 'ALL')
         break
 
-      case 'RECYCLE_RUNE':
-        commitMove(action.cardId, 'runes_deck', 'NOBODY')
+      case 'RECYCLE_RUNE': {
+        const round2 = currentRound.value
+        const ref2 = roundRef()
+        if (round2?.cards[action.cardId] && ref2) {
+          const deckCards = Object.values(round2.cards).filter(c => c.zoneId === 'runes_deck')
+          const bottomOrder = Math.min(0, ...deckCards.map(c => c.order)) - 1
+          if (DISSOLVE_GROUP_ZONES.has('runes_deck')) dissolveGroup(action.cardId, ref2)
+          round2.cards[action.cardId] = {
+            ...round2.cards[action.cardId],
+            zoneId: 'runes_deck',
+            order: bottomOrder,
+            state: { ...round2.cards[action.cardId].state, visibleTo: 'NOBODY', exhausted: false },
+          }
+          updateDoc(ref2, {
+            [`cards.${action.cardId}.zoneId`]: 'runes_deck',
+            [`cards.${action.cardId}.order`]: bottomOrder,
+            [`cards.${action.cardId}.state.visibleTo`]: 'NOBODY',
+            [`cards.${action.cardId}.state.exhausted`]: false,
+            _updatedBy: sessionId,
+            updatedAt: serverTimestamp(),
+          }).catch(console.error)
+        }
         break
+      }
 
       case 'PLAY_CARD':
       case 'MOVE_CARD':
@@ -942,6 +966,17 @@ export const useGameStore = defineStore('game', () => {
     writeLog(`${actorName(uid)} passe le tour`, uid)
   }
 
+  async function leaveVoluntarily() {
+    const uid = myUid.value
+    const gId = gameId.value
+    if (!uid || !gId) return
+    const gameRef = doc(firestore, 'games', gId)
+    await updateDoc(gameRef, {
+      leftPlayers: [...(leftPlayers.value), uid],
+      updatedAt: serverTimestamp(),
+    }).catch(console.error)
+  }
+
   async function submitSideboard(newDeckList: DeckList) {
     if (!gameId.value || !currentRoundId.value) return
     await gameApi.submitSideboard(gameId.value, currentRoundId.value, newDeckList)
@@ -973,6 +1008,8 @@ export const useGameStore = defineStore('game', () => {
     matchFormat,
     deckFormat,
     roundResults,
+    leftPlayers,
+    leaveVoluntarily,
     playerIds,
     playerNames,
     currentRoundId,
