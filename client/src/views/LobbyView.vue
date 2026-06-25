@@ -5,6 +5,7 @@ import type { GameMode, GameDeckFormat, GameMatchFormat } from '@riftbound/share
 import { MAX_PLAYERS_BY_MODE } from '@riftbound/shared'
 import { useAuthStore } from '@/stores/auth'
 import { useLobbyStore } from '@/stores/lobby'
+import { useActiveGame } from '@/composables/useActiveGame'
 import GameCard from '@/components/GameCard.vue'
 import TabBar from '@/components/TabBar.vue'
 import SelectCard from '@/components/SelectCard.vue'
@@ -13,6 +14,7 @@ import ActionButton from '@/components/ActionButton.vue'
 const router = useRouter()
 const authStore = useAuthStore()
 const lobbyStore = useLobbyStore()
+const { activeGame } = useActiveGame(() => authStore.user?.uid ?? null)
 
 // ── Tabs ──────────────────────────────────────────────────────────────────
 type TabId = 'matchmaking' | 'create' | 'join'
@@ -434,6 +436,24 @@ async function confirmLeave() {
             </div>
             <p v-if="joinError" class="join-error">{{ joinError }}</p>
             <ActionButton :disabled="roomCodeInput.length !== 5" @click="handleJoin">REJOINDRE</ActionButton>
+
+            <template v-if="activeGame">
+              <div class="rejoin-separator">
+                <div class="rejoin-separator__line" />
+                <span class="rejoin-separator__label">PARTIE EN COURS</span>
+                <div class="rejoin-separator__line" />
+              </div>
+              <button class="rejoin-btn" @click="router.push('/game/' + activeGame.gameId)">
+                <div class="rejoin-btn__dot" />
+                <div class="rejoin-btn__text">
+                  <span class="rejoin-btn__label">{{ activeGame.mode.toUpperCase() }} · {{ activeGame.matchFormat }}</span>
+                  <span class="rejoin-btn__sub">Reprendre la partie</span>
+                </div>
+                <svg class="rejoin-btn__arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/>
+                </svg>
+              </button>
+            </template>
           </div>
 
           <!-- Chat (in lobby) -->
@@ -1547,6 +1567,93 @@ async function confirmLeave() {
   padding: 0.1rem 0.5rem;
   border-left: 2px solid rgba(0, 204, 185, 0.2);
   font-style: italic;
+}
+
+/* ── Rejoin separator ── */
+.rejoin-separator {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.25rem 0;
+}
+
+.rejoin-separator__line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0, 204, 185, 0.2));
+}
+
+.rejoin-separator__line:last-child {
+  background: linear-gradient(270deg, transparent, rgba(0, 204, 185, 0.2));
+}
+
+.rejoin-separator__label {
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  color: #00CCB9;
+  opacity: 0.6;
+  white-space: nowrap;
+}
+
+/* ── Rejoin button ── */
+.rejoin-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 1rem;
+  background: rgba(0, 204, 185, 0.05);
+  border: 1px solid rgba(0, 204, 185, 0.25);
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.rejoin-btn:hover {
+  background: rgba(0, 204, 185, 0.1);
+  border-color: rgba(0, 204, 185, 0.5);
+}
+
+.rejoin-btn__dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: #00CCB9;
+  flex-shrink: 0;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+.rejoin-btn__text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.rejoin-btn__label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #00CCB9;
+}
+
+.rejoin-btn__sub {
+  font-size: 0.55rem;
+  color: #4a8a84;
+  letter-spacing: 0.05em;
+}
+
+.rejoin-btn__arrow {
+  width: 0.85rem;
+  height: 0.85rem;
+  color: #00CCB9;
+  flex-shrink: 0;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.75); }
 }
 
 /* ── Join error ── */

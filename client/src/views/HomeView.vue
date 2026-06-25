@@ -1,14 +1,9 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
-import { useActiveGame } from '@/composables/useActiveGame'
 import TitleOrnament from '@/components/TitleOrnament.vue'
 import GameButton from '@/components/GameButton.vue'
 
 const router = useRouter()
-const authStore = useAuthStore()
-
-const { activeGame } = useActiveGame(() => authStore.user?.uid ?? null)
 
 const navItems = [
   { label: 'DECKS',    icon: 'M4 6h16M4 10h16M4 14h16M4 18h16',   route: '/decks'    },
@@ -28,20 +23,6 @@ const navItems = [
 
       <TitleOrnament />
     </div>
-
-    <!-- Bannière partie en cours -->
-    <Transition name="active-game">
-      <div v-if="activeGame" class="active-game-banner" @click="router.push('/game/' + activeGame.gameId)">
-        <div class="active-game-banner__dot" />
-        <div class="active-game-banner__text">
-          <span class="active-game-banner__label">PARTIE EN COURS</span>
-          <span class="active-game-banner__sub">{{ activeGame.mode.toUpperCase() }} · {{ activeGame.matchFormat }}</span>
-        </div>
-        <svg class="active-game-banner__arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/>
-        </svg>
-      </div>
-    </Transition>
 
     <!-- Actions -->
     <div class="actions">
@@ -200,71 +181,6 @@ const navItems = [
   text-transform: uppercase;
   transition: color 0.2s;
 }
-
-/* ── Bannière partie en cours ── */
-.active-game-banner {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.7rem 1.25rem;
-  background: rgba(0, 204, 185, 0.06);
-  border: 1px solid rgba(0, 204, 185, 0.3);
-  cursor: pointer;
-  width: 100%;
-  max-width: 24rem;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.active-game-banner:hover {
-  background: rgba(0, 204, 185, 0.12);
-  border-color: rgba(0, 204, 185, 0.55);
-}
-
-.active-game-banner__dot {
-  width: 0.45rem;
-  height: 0.45rem;
-  border-radius: 50%;
-  background: #00CCB9;
-  flex-shrink: 0;
-  animation: pulse-dot 2s ease-in-out infinite;
-}
-
-.active-game-banner__text {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-}
-
-.active-game-banner__label {
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  color: #00CCB9;
-}
-
-.active-game-banner__sub {
-  font-size: 0.55rem;
-  letter-spacing: 0.1em;
-  color: #4a8a84;
-}
-
-.active-game-banner__arrow {
-  width: 1rem;
-  height: 1rem;
-  color: #00CCB9;
-  flex-shrink: 0;
-}
-
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(0.75); }
-}
-
-.active-game-enter-active { transition: opacity 0.2s ease, transform 0.2s ease; }
-.active-game-leave-active { transition: opacity 0.15s ease; }
-.active-game-enter-from  { opacity: 0; transform: translateY(-6px); }
-.active-game-leave-to    { opacity: 0; }
 
 /* ── Disclaimer ── */
 .disclaimer {

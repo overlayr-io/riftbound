@@ -360,6 +360,22 @@ export class GameRepository {
     return { roundId: newRoundRef.id }
   }
 
+  async endGame(gameId: string, roundId: string, winnerId: string): Promise<void> {
+    const now = FieldValue.serverTimestamp()
+    const batch = db.batch()
+    batch.update(this.col.doc(gameId).collection('rounds').doc(roundId), {
+      winnerId,
+      endedAt: now,
+      updatedAt: now,
+    })
+    batch.update(this.col.doc(gameId), {
+      roundResults: FieldValue.arrayUnion({ round: 0, winnerId }),
+      endedAt: now,
+      updatedAt: now,
+    })
+    await batch.commit()
+  }
+
   async get(gameId: string): Promise<{ playerIds: PlayerId[]; playerNames: Record<PlayerId, { name: string; teamId: '1' | '2' | null }> } | null> {
     const snap = await this.col.doc(gameId).get()
     if (!snap.exists) return null
@@ -390,11 +406,14 @@ export class GameRepository {
     }
   }
 
-  async getGameData(gameId: string): Promise<{ matchFormat: GameMatchFormat } | null> {
+  async getGameData(gameId: string): Promise<{ matchFormat: GameMatchFormat; roundResults: { round: number; winnerId: string }[] } | null> {
     const snap = await this.col.doc(gameId).get()
     if (!snap.exists) return null
     const d = snap.data()!
-    return { matchFormat: d.matchFormat ?? 'BO1' }
+    return {
+      matchFormat: d.matchFormat ?? 'BO1',
+      roundResults: d.roundResults ?? [],
+    }
   }
 
   async devSkipSetup(

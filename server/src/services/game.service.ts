@@ -204,8 +204,25 @@ export class GameService {
     const loserId = game.playerIds.find((id) => id !== winnerId)
     if (!loserId) throw Object.assign(new Error('CANNOT_DETERMINE_LOSER'), { status: 400 })
 
-    // BO1 → upgrade to BO3 for the series
     const gameSnap = await this.gameRepo.getGameData(gameId)
+
+    // Check if this win ends the match (before appending the new result)
+    const existingResults = gameSnap?.roundResults ?? []
+    const allResults = [...existingResults, { round: round.round, winnerId }]
+    const winsNeeded = gameSnap?.matchFormat === 'BO5' ? 3 : gameSnap?.matchFormat === 'BO3' ? 2 : null
+    if (winsNeeded !== null) {
+      const winsByPlayer: Record<string, number> = {}
+      for (const r of allResults) {
+        winsByPlayer[r.winnerId] = (winsByPlayer[r.winnerId] ?? 0) + 1
+      }
+      const matchWinner = Object.entries(winsByPlayer).find(([, w]) => w >= winsNeeded)?.[0]
+      if (matchWinner) {
+        await this.gameRepo.endGame(gameId, roundId, matchWinner)
+        return
+      }
+    }
+
+    // BO1 → upgrade to BO3 for the series
     const upgradeMatchFormat: GameMatchFormat | undefined =
       gameSnap?.matchFormat === 'BO1' ? 'BO3' : undefined
 

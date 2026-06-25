@@ -973,6 +973,7 @@ export const useGameStore = defineStore('game', () => {
     const gameRef = doc(firestore, 'games', gId)
     await updateDoc(gameRef, {
       leftPlayers: [...(leftPlayers.value), uid],
+      endedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     }).catch(console.error)
   }
