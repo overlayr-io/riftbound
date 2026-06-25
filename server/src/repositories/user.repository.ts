@@ -1,6 +1,6 @@
 import type { User, Role, UserStatus, BetaAccess } from '@riftbound/shared'
 import { db } from '../config/firebase'
-import { FieldValue } from 'firebase-admin/firestore'
+import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 
 function docToUser(id: string, data: FirebaseFirestore.DocumentData): User {
   return {
@@ -11,8 +11,11 @@ function docToUser(id: string, data: FirebaseFirestore.DocumentData): User {
     role: data.role ?? null,
     status: (data.status as UserStatus) ?? 'active',
     betaAccess: (data.betaAccess as BetaAccess) ?? 'none',
+    suspendedUntil: data.suspendedUntil?.toDate() ?? null,
+    suspendReason: data.suspendReason ?? null,
     createdAt: data.createdAt?.toDate() ?? new Date(),
     lastSeenAt: data.lastSeenAt?.toDate() ?? null,
+    deletedAt: data.deletedAt?.toDate() ?? null,
   }
 }
 
@@ -32,10 +35,15 @@ export class UserRepository {
     return docToUser(doc.id, doc.data()!)
   }
 
+  /** Scanne les N derniers utilisateurs vus (tri serveur ; filtre/recherche en service). */
+  async list(scanLimit = 300): Promise<User[]> {
+    const snap = await this.col.orderBy('lastSeenAt', 'desc').limit(scanLimit).get()
+    return snap.docs.map((d) => docToUser(d.id, d.data()))
+  }
+
   /**
    * Provisionne (ou rafraîchit) le doc utilisateur à la connexion.
-   * N'écrase JAMAIS role / status / betaAccess (gérés par l'admin) :
-   * ces champs ne sont posés qu'à la création.
+   * N'écrase JAMAIS role / status / betaAccess / modération (gérés par l'admin).
    */
   async upsertOnAuth(input: UpsertUserInput): Promise<User> {
     const ref = this.col.doc(input.uid)
@@ -50,8 +58,11 @@ export class UserRepository {
         role: null,
         status: 'active',
         betaAccess: 'none',
+        suspendedUntil: null,
+        suspendReason: null,
         createdAt: now,
         lastSeenAt: now,
+        deletedAt: null,
       })
     } else {
       await ref.update({
@@ -78,5 +89,59 @@ export class UserRepository {
       { lastSeenAt: FieldValue.serverTimestamp() },
       { merge: true },
     )
+  }
+
+  // ── Modération ────────────────────────────────────────────────────────────
+  async suspend(uid: string, until: Date, reason: string): Promise<void> {
+    await this.col.doc(uid).set({
+      status: 'suspended' as UserStatus,
+      suspendedUntil: Timestamp.fromDate(until),
+      suspendReason: reason,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true })
+  }
+
+  async ban(uid: string, reason: string): Promise<void> {
+    await this.col.doc(uid).set({
+      status: 'banned' as UserStatus,
+      suspendedUntil: null,
+      suspendReason: reason,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true })
+  }
+
+  async reactivate(uid: string): Promise<void> {
+    await this.col.doc(uid).set({
+      status: 'active' as UserStatus,
+      suspendedUntil: null,
+      suspendReason: null,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true })
+  }
+
+  async setDisplayName(uid: string, displayName: string): Promise<void> {
+    await this.col.doc(uid).set(
+      { displayName, updatedAt: FieldValue.serverTimestamp() },
+      { merge: true },
+    )
+  }
+
+  async setBetaAccess(uid: string, betaAccess: BetaAccess): Promise<void> {
+    await this.col.doc(uid).set(
+      { betaAccess, updatedAt: FieldValue.serverTimestamp() },
+      { merge: true },
+    )
+  }
+
+  async softDelete(uid: string): Promise<void> {
+    await this.col.doc(uid).set({
+      status: 'banned' as UserStatus,
+      deletedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true })
+  }
+
+  async hardDelete(uid: string): Promise<void> {
+    await this.col.doc(uid).delete()
   }
 }

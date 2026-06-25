@@ -47,6 +47,17 @@ export class AdminGamesRepository {
     return snap.docs.map((d) => this.toSummary(d.id, d.data()))
   }
 
+  /** Historique des parties d'un joueur (fiche joueur). */
+  async listForPlayer(uid: string, scanLimit = 50): Promise<GameSummary[]> {
+    const snap = await this.col
+      .where('playerIds', 'array-contains', uid)
+      .limit(scanLimit)
+      .get()
+    return snap.docs
+      .map((d) => this.toSummary(d.id, d.data()))
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+  }
+
   async getDetail(gameId: string): Promise<GameDetail | null> {
     const snap = await this.col.doc(gameId).get()
     if (!snap.exists) return null

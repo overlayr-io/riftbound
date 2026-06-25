@@ -5,6 +5,7 @@ import MainLayout from '@/layouts/MainLayout.vue'
 import GameLayout from '@/layouts/GameLayout.vue'
 import AdminLayout from '@/layouts/AdminLayout.vue'
 import ToastContainer from '@/components/ToastContainer.vue'
+import ImpersonationBanner from '@/components/ImpersonationBanner.vue'
 
 const route = useRoute()
 
@@ -20,6 +21,7 @@ const layout = computed(() => {
 </script>
 
 <template>
+  <ImpersonationBanner />
   <component :is="layout" v-if="layout">
     <RouterView />
   </component>

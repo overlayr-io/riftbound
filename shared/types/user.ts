@@ -14,6 +14,10 @@ export interface User {
   role: Role | null
   status: UserStatus
   betaAccess: BetaAccess
+  /** Modération : fin de suspension temporaire (null = pas suspendu temporairement). */
+  suspendedUntil: Date | null
+  suspendReason: string | null
   createdAt: Date
   lastSeenAt: Date | null
+  deletedAt: Date | null
 }

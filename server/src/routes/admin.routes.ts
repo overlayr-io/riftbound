@@ -3,6 +3,8 @@ import { assignRole, revokeRole, listAudit } from '../controllers/admin.controll
 import { requireAuth } from '../middlewares/auth.middleware'
 import { requirePermission } from '../middlewares/rbac.middleware'
 import adminGamesRoutes from './admin-games.routes'
+import adminUsersRoutes from './admin-users.routes'
+import adminBetaRoutes from './admin-beta.routes'
 
 const router = Router()
 
@@ -18,5 +20,8 @@ router.get('/audit', requirePermission('audit:read'), listAudit)
 
 // Domaine A — jeux live & spectate + ops.
 router.use('/', adminGamesRoutes)
+// Domaine B — joueurs/comptes + accès beta.
+router.use('/', adminUsersRoutes)
+router.use('/', adminBetaRoutes)
 
 export default router

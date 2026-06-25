@@ -53,6 +53,21 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ── Accès beta (écrits par le serveur uniquement) ────────────────────────
+    // Codes/waitlist sensibles : lecture admin, redeem/triage passent par l'API.
+    match /invites/{code} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /waitlist/{entryId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /betaSettings/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
     // Refus par défaut pour tout chemin non couvert.
     match /{document=**} {
       allow read, write: if false;

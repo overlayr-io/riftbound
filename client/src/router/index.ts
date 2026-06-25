@@ -6,6 +6,7 @@ import PatchNotesView from '@/views/PatchNotesView.vue'
 import SettingsView from '@/views/SettingsView.vue'
 import GameView from '@/views/GameView.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useBetaStore } from '@/stores/beta'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -40,6 +41,12 @@ const router = createRouter({
       component: SettingsView,
       meta: { layout: 'main' },
     },
+    {
+      path: '/welcome',
+      name: 'welcome',
+      component: () => import('@/views/BetaGateView.vue'),
+      meta: { layout: 'blank' },
+    },
 
     // ── Backoffice admin (chunk lazy-loaded, jamais chargé pour un joueur) ──
     {
@@ -67,6 +74,24 @@ const router = createRouter({
       meta: { layout: 'admin', requiresAdmin: true, requiresPermission: ['games:read'] },
     },
     {
+      path: '/admin/users',
+      name: 'admin-users',
+      component: () => import('@/views/admin/UsersListView.vue'),
+      meta: { layout: 'admin', requiresAdmin: true, requiresPermission: ['players:read'] },
+    },
+    {
+      path: '/admin/users/:uid',
+      name: 'admin-user-detail',
+      component: () => import('@/views/admin/UserDetailView.vue'),
+      meta: { layout: 'admin', requiresAdmin: true, requiresPermission: ['players:read'] },
+    },
+    {
+      path: '/admin/beta',
+      name: 'admin-beta',
+      component: () => import('@/views/admin/BetaView.vue'),
+      meta: { layout: 'admin', requiresAdmin: true, requiresPermission: ['beta:waitlist_decide'] },
+    },
+    {
       path: '/admin/audit',
       name: 'admin-audit',
       component: () => import('@/views/admin/AuditLogView.vue'),
@@ -83,21 +108,35 @@ const router = createRouter({
 
 // Guard front : ré-appliqué côté serveur ET dans les security rules.
 router.beforeEach(async (to) => {
-  if (!to.meta.requiresAdmin) return true
+  // ── Guard admin (RBAC) ──
+  if (to.meta.requiresAdmin) {
+    const auth = useAuthStore()
+    await auth.waitForInit()
+    if (!auth.isAdmin) {
+      return { name: 'admin-login', query: { redirect: to.fullPath } }
+    }
+    const required = (to.meta.requiresPermission as Permission[] | undefined) ?? []
+    if (required.some((perm) => !auth.can(perm))) {
+      return { name: 'admin-home' }
+    }
+    return true
+  }
+
+  // ── Gate beta (joueur) ──
+  // Routes hors-jeu (admin/login/welcome) : pas de gate.
+  if (to.meta.layout === 'blank' || to.path.startsWith('/admin')) return true
 
   const auth = useAuthStore()
   await auth.waitForInit()
+  // Une session « voir comme » contourne le gate (l'admin observe un joueur).
+  if (auth.isImpersonating) return true
 
-  if (!auth.isAdmin) {
-    return { name: 'admin-login', query: { redirect: to.fullPath } }
+  const beta = useBetaStore()
+  const access = beta.state ?? (await beta.refresh())
+  if (access && !access.allowed) {
+    const query = typeof to.query.code === 'string' ? { code: to.query.code } : {}
+    return { name: 'welcome', query }
   }
-
-  const required = (to.meta.requiresPermission as Permission[] | undefined) ?? []
-  if (required.some((perm) => !auth.can(perm))) {
-    // Autorisé au backoffice mais pas à cette page → renvoi à l'accueil admin.
-    return { name: 'admin-home' }
-  }
-
   return true
 })
 
