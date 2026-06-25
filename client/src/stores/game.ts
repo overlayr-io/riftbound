@@ -316,6 +316,22 @@ export const useGameStore = defineStore('game', () => {
     commitMove(cardId, 'hand', 'SELF')
   }
 
+  function shuffleDeck(deckZone: ZoneId) {
+    const round = currentRound.value
+    const ref = roundRef()
+    if (!round || !ref) return
+    const deckCards = Object.values(round.cards).filter(c => c.zoneId === deckZone)
+    if (deckCards.length < 2) return
+    const orders = deckCards.map(c => c.order).sort((a, b) => a - b)
+    const shuffledOrders = [...orders].sort(() => Math.random() - 0.5)
+    const updates: Record<string, unknown> = {}
+    deckCards.forEach((card, i) => {
+      round.cards[card.cardId] = { ...card, order: shuffledOrders[i] }
+      updates[`cards.${card.cardId}.order`] = shuffledOrders[i]
+    })
+    updateDoc(ref, { ...updates, _updatedBy: sessionId, updatedAt: serverTimestamp() }).catch(console.error)
+  }
+
   const DISSOLVE_GROUP_ZONES = new Set<ZoneId>(['discard', 'banish', 'hand', 'main_deck', 'runes_deck'])
 
   // Remove a card from any group it belongs to (as parent or child)
@@ -800,5 +816,6 @@ export const useGameStore = defineStore('game', () => {
     addToStack,
     destroyToken,
     setScore,
+    shuffleDeck,
   }
 })

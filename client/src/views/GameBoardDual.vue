@@ -290,7 +290,7 @@ function openTray(count: number, mode: 'vision' | 'reveal') {
 function onDeckVision(count: number) { openTray(count, 'vision') }
 function onDeckReveal(count: number) { openTray(count, 'reveal') }
 
-function onTrayAction(cardId: string, action: 'top' | 'bottom' | 'hand' | 'reveal') {
+function onTrayAction(cardId: string, action: 'top' | 'bottom' | 'hand' | 'reveal' | 'discard') {
   const uid = store.myUid ?? ''
   switch (action) {
     case 'top':
@@ -306,9 +306,10 @@ function onTrayAction(cardId: string, action: 'top' | 'bottom' | 'hand' | 'revea
       trayHandCount++
       break
     case 'reveal':
-      store.applyAction({ type: 'REVEAL_CARD', playerId: uid, cardId })
-      deckVision.broadcastReveal([...trayRevealedIds(), cardId])
-      trayRevealedCount++
+      // "Révélé" est uniquement un label de contexte dans la fenêtre — aucune action en jeu.
+      break
+    case 'discard':
+      store.applyAction({ type: 'DISCARD_CARD', playerId: uid, cardId, fromZoneId: 'main_deck' })
       break
   }
   // Remove the handled card from the tray; close when empty.
@@ -343,6 +344,44 @@ function closeTray() {
   }
   trayOpen.value = false
   trayCardIds.value = []
+}
+
+const trayCanAddMore = computed(() => {
+  const key = deckMenuKey.value
+  if (!key) return false
+  return deckCardsSorted(key).some(c => !trayCardIds.value.includes(c.cardId))
+})
+
+function onTrayAddOne() {
+  const key = deckMenuKey.value
+  if (!key) return
+  const remaining = deckCardsSorted(key).filter(c => !trayCardIds.value.includes(c.cardId))
+  const next = remaining[0]
+  if (!next) return
+  trayCardIds.value = [...trayCardIds.value, next.cardId]
+  trayLookedCount++
+  if (trayMode.value === 'reveal') {
+    const { owner } = parseZoneKey(key)
+    store.applyAction({ type: 'REVEAL_CARD', playerId: owner ?? '', cardId: next.cardId })
+    deckVision.broadcastReveal([...trayRevealedIds(), next.cardId])
+  } else {
+    deckVision.setVisionPresence(trayCardIds.value.length)
+  }
+}
+
+function onTrayRecycleAll() {
+  const key = deckMenuKey.value
+  if (!key) return
+  const { zone } = parseZoneKey(key)
+  for (const cardId of [...trayCardIds.value]) {
+    store.sendToDeck(cardId, zone as ZoneId, 'bottom', trayMode.value === 'vision')
+  }
+  store.shuffleDeck(zone as ZoneId)
+  const uid = store.myUid ?? ''
+  store.writeLog(`${store.actorName(uid)} a recyclé ${trayCardIds.value.length} carte(s) en dessous de son deck et a mélangé`, uid)
+  trayCardIds.value = []
+  deckVision.clearVisionPresence()
+  trayOpen.value = false
 }
 
 function onDeckDraw(count: number) {
@@ -769,7 +808,10 @@ function bleedRect(rect: Rect): Rect {
         :open="trayOpen"
         :cards="trayCards"
         :mode="trayMode"
+        :can-add-more="trayCanAddMore"
         @action="onTrayAction"
+        @add-one="onTrayAddOne"
+        @recycle-all="onTrayRecycleAll"
         @close="closeTray"
       />
 
