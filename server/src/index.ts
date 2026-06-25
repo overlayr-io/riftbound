@@ -5,6 +5,7 @@ import { env } from './config/env'
 import './config/firebase'
 import router from './routes'
 import { errorHandler } from './middlewares/error.middleware'
+import { metricsMiddleware } from './middlewares/metrics.middleware'
 
 const app = express()
 
@@ -12,6 +13,7 @@ app.use(helmet())
 app.use(cors({ origin: env.CLIENT_URL }))
 app.use(express.json())
 
+app.use('/api', metricsMiddleware)
 app.use('/api', router)
 app.use(errorHandler)
 

@@ -5,6 +5,7 @@ import { requirePermission } from '../middlewares/rbac.middleware'
 import adminGamesRoutes from './admin-games.routes'
 import adminUsersRoutes from './admin-users.routes'
 import adminBetaRoutes from './admin-beta.routes'
+import adminAnalyticsRoutes from './admin-analytics.routes'
 
 const router = Router()
 
@@ -23,5 +24,7 @@ router.use('/', adminGamesRoutes)
 // Domaine B — joueurs/comptes + accès beta.
 router.use('/', adminUsersRoutes)
 router.use('/', adminBetaRoutes)
+// Domaine C — analytics & santé.
+router.use('/', adminAnalyticsRoutes)
 
 export default router

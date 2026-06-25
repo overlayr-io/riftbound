@@ -92,6 +92,18 @@ const router = createRouter({
       meta: { layout: 'admin', requiresAdmin: true, requiresPermission: ['beta:waitlist_decide'] },
     },
     {
+      path: '/admin/analytics',
+      name: 'admin-analytics',
+      component: () => import('@/views/admin/AnalyticsView.vue'),
+      meta: { layout: 'admin', requiresAdmin: true, requiresPermission: ['analytics:read'] },
+    },
+    {
+      path: '/admin/revenue',
+      name: 'admin-revenue',
+      component: () => import('@/views/admin/RevenueView.vue'),
+      meta: { layout: 'admin', requiresAdmin: true, requiresPermission: ['revenue:read'] },
+    },
+    {
       path: '/admin/audit',
       name: 'admin-audit',
       component: () => import('@/views/admin/AuditLogView.vue'),

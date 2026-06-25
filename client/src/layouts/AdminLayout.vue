@@ -24,6 +24,8 @@ const navItems: NavItem[] = [
   { label: 'Parties', to: '/admin/games', permission: 'games:read', icon: 'M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664zM21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
   { label: 'Joueurs', to: '/admin/users', permission: 'players:read', icon: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a4 4 0 10-3-6.5' },
   { label: 'Accès beta', to: '/admin/beta', permission: 'beta:waitlist_decide', icon: 'M15 7a2 2 0 012 2m4 0a6 6 0 01-7.74 5.74L9 19l-2 2-2-2 1.26-3.26A6 6 0 1121 9z' },
+  { label: 'Analytics', to: '/admin/analytics', permission: 'analytics:read', icon: 'M3 3v18h18M7 14l3-3 3 3 5-6' },
+  { label: 'Revenu', to: '/admin/revenue', permission: 'revenue:read', icon: 'M12 8c-1.66 0-3 .9-3 2s1.34 2 3 2 3 .9 3 2-1.34 2-3 2m0-8V6m0 12v-2m0-8c1.1 0 2.08.4 2.6 1M9.4 15c.52.6 1.5 1 2.6 1' },
   { label: 'Audit', to: '/admin/audit', permission: 'audit:read', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4' },
   { label: 'Rôles', to: '/admin/roles', permission: 'admin:manage_roles', icon: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4z' },
 ]
