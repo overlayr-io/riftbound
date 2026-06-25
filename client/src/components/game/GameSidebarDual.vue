@@ -9,6 +9,7 @@ import GameChatPanel from './GameChatPanel.vue'
 import GameQuitConfirm from './GameQuitConfirm.vue'
 import GameEmotePanel from './GameEmotePanel.vue'
 import GameEmoteDisplay from './GameEmoteDisplay.vue'
+import GameNextRoundModal from './GameNextRoundModal.vue'
 
 const { SIDEBAR_WIDTH } = useViewport()
 const gameStore = useGameStore()
@@ -22,6 +23,16 @@ const isMyTurn = computed(() => {
 
 const turnCount = computed(() => gameStore.currentRound?.currentTurn?.turn ?? 0)
 
+// ── Round results (win/loss squares) ─────────────────────────────────────────
+const myRoundResults = computed(() => {
+  const uid = gameStore.myUid
+  return gameStore.roundResults.map(r => r.winnerId === uid ? 'win' : 'loss')
+})
+const oppRoundResults = computed(() => {
+  const uid = gameStore.myUid
+  return gameStore.roundResults.map(r => r.winnerId !== uid ? 'win' : 'loss')
+})
+
 // ── Scores (realtime Firestore + debounce 2s) ─────────────────────────────────
 const { myScore, oppScore, changeMyScore } = usePlayerScore()
 
@@ -29,10 +40,24 @@ const { myScore, oppScore, changeMyScore } = usePlayerScore()
 const isChatOpen = ref(false)
 const isEmoteOpen = ref(false)
 const showQuitConfirm = ref(false)
+const showNextRound = ref(false)
+const nextRoundLoading = ref(false)
 
 function confirmLeave() {
   showQuitConfirm.value = false
   // TODO: leave room + router.push('/')
+}
+
+async function confirmNextRound(winnerId: string) {
+  nextRoundLoading.value = true
+  try {
+    await gameStore.startNextRound(winnerId)
+    showNextRound.value = false
+  } catch (e) {
+    console.error('[nextRound]', e)
+  } finally {
+    nextRoundLoading.value = false
+  }
 }
 
 // ── Chat badge (unread count) ─────────────────────────────────────────────────
@@ -98,9 +123,13 @@ onUnmounted(() => document.removeEventListener('keydown', onKey))
     :class="isMyTurn ? 'sidebar--my-turn' : 'sidebar--opp-turn'"
   >
 
-    <!-- ── Bouton rejouer (tout en haut, isolé) ── -->
+    <!-- ── Bouton rejouer / partie suivante (tout en haut, isolé) ── -->
     <div class="top-section">
-      <button class="sidebar-btn sidebar-btn--restart" title="Rejouer">
+      <button
+        class="sidebar-btn sidebar-btn--restart"
+        :title="gameStore.matchFormat === 'BO1' ? 'Rejouer (BO3)' : 'Partie suivante'"
+        @click="showNextRound = true"
+      >
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
         </svg>
@@ -110,9 +139,19 @@ onUnmounted(() => document.removeEventListener('keydown', onKey))
     <div class="sidebar-divider" />
 
     <!-- ── Score adversaire ── -->
-    <div class="score-display">
-      <span class="score-display__value">{{ oppScore }}</span>
-      <span class="score-display__label">pts</span>
+    <div class="score-block">
+      <div class="score-display">
+        <span class="score-display__value">{{ oppScore }}</span>
+        <span class="score-display__label">pts</span>
+      </div>
+      <div v-if="oppRoundResults.length > 0" class="round-dots">
+        <span
+            v-for="(result, i) in oppRoundResults"
+            :key="i"
+            class="round-dot"
+            :class="result === 'win' ? 'round-dot--win' : 'round-dot--loss'"
+        />
+      </div>
     </div>
 
     <!-- ── Centre ── -->
@@ -125,10 +164,20 @@ onUnmounted(() => document.removeEventListener('keydown', onKey))
 
     <!-- ── Score joueur local avec +/- ── -->
     <div class="player-score">
+      <div v-if="myRoundResults.length > 0" class="round-dots mb-2">
+          <span
+              v-for="(result, i) in myRoundResults"
+              :key="i"
+              class="round-dot"
+              :class="result === 'win' ? 'round-dot--win' : 'round-dot--loss'"
+          />
+      </div>
       <button class="score-btn pb-1" title="+1 rune" @click="changeMyScore(1)">▲</button>
-      <div class="score-display">
-        <span class="score-display__value">{{ myScore }}</span>
-        <span class="score-display__label">pts</span>
+      <div class="score-block">
+        <div class="score-display">
+          <span class="score-display__value">{{ myScore }}</span>
+          <span class="score-display__label">pts</span>
+        </div>
       </div>
       <button class="score-btn pb-2" title="-1 rune" @click="changeMyScore(-1)">▼</button>
     </div>
@@ -235,6 +284,16 @@ onUnmounted(() => document.removeEventListener('keydown', onKey))
     @cancel="showQuitConfirm = false"
     @confirm="confirmLeave"
   />
+
+  <GameNextRoundModal
+    :open="showNextRound"
+    :match-format="gameStore.matchFormat"
+    :player-names="gameStore.playerNames"
+    :player-ids="gameStore.playerIds"
+    :loading="nextRoundLoading"
+    @cancel="showNextRound = false"
+    @confirm="confirmNextRound"
+  />
 </template>
 
 <style scoped>
@@ -330,6 +389,28 @@ onUnmounted(() => document.removeEventListener('keydown', onKey))
   @apply flex flex-col items-center;
   padding: 0.25rem 0 0.1rem;
 }
+
+/* ── Score block (score + round dots) ── */
+.score-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+/* ── Round result dots ── */
+.round-dots {
+  display: flex;
+  gap: 3px;
+}
+.round-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+.round-dot--win  { background: #4caf72; box-shadow: 0 0 4px rgba(76, 175, 80, 0.5); }
+.round-dot--loss { background: #e05050; box-shadow: 0 0 4px rgba(224, 80, 80, 0.4); }
 
 /* ── Score display ── */
 .score-display {

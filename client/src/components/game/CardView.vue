@@ -335,7 +335,7 @@ function onContextMenu(e: MouseEvent) {
   will-change: transform;
   transform-origin: 50% 50%;
   perspective: 800px;
-  transition: transform 0.3s var(--ease);
+  transition: transform 0.5s var(--ease);
 }
 
 .card.dragging {
@@ -348,7 +348,7 @@ function onContextMenu(e: MouseEvent) {
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
-  transition: transform 0.55s var(--ease);
+  transition: transform 0.7s var(--ease);
 }
 
 .card-face {

@@ -159,4 +159,12 @@ export const gameApi = {
   getLogs(gameId: string): Promise<GameLog[]> {
     return requestGame('GET', `/${gameId}/logs`)
   },
+
+  submitSideboard(gameId: string, roundId: string, newDeckList: DeckList): Promise<void> {
+    return requestGame('POST', `/${gameId}/rounds/${roundId}/sideboard`, { newDeckList })
+  },
+
+  nextRound(gameId: string, roundId: string, winnerId: string): Promise<void> {
+    return requestGame('POST', `/${gameId}/rounds/${roundId}/next-round`, { winnerId })
+  },
 }

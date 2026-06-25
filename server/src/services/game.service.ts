@@ -87,7 +87,9 @@ export class GameService {
 
     const allDone = Object.values(round.players).every((p) => p.submittedBattlefield !== null)
     if (allDone) {
-      await this.gameRepo.advanceSetup(gameId, roundId, 'dice_roll')
+      // If diceWinnerId is already set (next round in BO3), skip dice_roll
+      const nextStep = round.diceWinnerId ? 'choose_first_player' : 'dice_roll'
+      await this.gameRepo.advanceSetup(gameId, roundId, nextStep)
     }
   }
 
@@ -171,6 +173,51 @@ export class GameService {
     await this.gameRepo.initializeCards(gameId, roundId)
     await this.gameRepo.shuffleDecks(gameId, roundId)
     await this.gameRepo.confirmDiscard(gameId, roundId)
+  }
+
+  async submitSideboard(
+    gameId: string,
+    roundId: string,
+    uid: PlayerId,
+    newDeckList: DeckList,
+  ): Promise<void> {
+    const round = await this.gameRepo.getRound(gameId, roundId)
+    if (!round || round.setup !== 'sideboard') return
+    if (!round.players[uid]) throw Object.assign(new Error('PLAYER_NOT_IN_ROUND'), { status: 403 })
+    await this.gameRepo.submitSideboard(gameId, roundId, uid, newDeckList)
+  }
+
+  async nextRound(
+    gameId: string,
+    roundId: string,
+    uid: PlayerId,
+    winnerId: PlayerId,
+  ): Promise<void> {
+    const game = await this.gameRepo.get(gameId)
+    if (!game) throw Object.assign(new Error('GAME_NOT_FOUND'), { status: 404 })
+    if (!game.playerIds.includes(winnerId)) throw Object.assign(new Error('INVALID_WINNER'), { status: 400 })
+
+    const round = await this.gameRepo.getRound(gameId, roundId)
+    if (!round) throw Object.assign(new Error('ROUND_NOT_FOUND'), { status: 404 })
+
+    // The loser of the previous game wins the dice roll in the next
+    const loserId = game.playerIds.find((id) => id !== winnerId)
+    if (!loserId) throw Object.assign(new Error('CANNOT_DETERMINE_LOSER'), { status: 400 })
+
+    // BO1 → upgrade to BO3 for the series
+    const gameSnap = await this.gameRepo.getGameData(gameId)
+    const upgradeMatchFormat: GameMatchFormat | undefined =
+      gameSnap?.matchFormat === 'BO1' ? 'BO3' : undefined
+
+    await this.gameRepo.createNextRound({
+      gameId,
+      previousRoundId: roundId,
+      previousRoundWinnerId: winnerId,
+      roundNumber: round.round + 1,
+      playerIds: game.playerIds,
+      diceWinnerId: loserId,
+      upgradeMatchFormat,
+    })
   }
 
   async devSkipSetup(gameId: string, roundId: string, playersDecks: Record<string, DeckList>): Promise<void> {

@@ -67,6 +67,10 @@ function handleImportDeck(text: string) {
   game.importDeck(text)
 }
 
+function handleSubmitSideboard(newDeckList: import('@riftbound/shared').DeckList) {
+  game.submitSideboard(newDeckList)
+}
+
 function handleSelectBattlefield(card: Card) {
   game.selectBattlefield(card)
 }
@@ -215,10 +219,14 @@ const isDev = import.meta.env.DEV
             :battlefields="myBattlefields"
             :all-decks-done="game.allDecksDone"
             :all-b-f-done="game.allBFDone"
+            :all-sideboard-done="game.allSideboardDone"
             :importing="game.importing"
             :import-error="game.importError"
             :is-tied="!!(game.tiedPlayerIds && game.myUid && game.tiedPlayerIds.includes(game.myUid))"
             :my-dice-roll="game.myState?.diceRoll ?? null"
+            :current-deck-list="game.myDeck"
+            :my-sideboard-done="game.myState?.sideboardDone ?? false"
+            :used-battlefield-ids="game.myUid ? (game.currentRound?.usedBattlefields?.[game.myUid] ?? []) : []"
             :is-dice-winner="isDiceWinner"
             :player-choices="playerChoices"
             :first-player-id="game.currentRound?.firstPlayerId ?? null"
@@ -226,6 +234,7 @@ const isDev = import.meta.env.DEV
             :all-b-f-cards="allBFCards"
             :discarded-b-f-id="game.currentRound?.discardedBattlefieldId ?? null"
             @import-deck="handleImportDeck"
+            @submit-sideboard="handleSubmitSideboard"
             @select-battlefield="handleSelectBattlefield"
             @reroll="handleReroll"
             :mulligan-hand="mulliganHand"

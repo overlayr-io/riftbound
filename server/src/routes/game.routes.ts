@@ -8,6 +8,8 @@ import {
   discardBattlefield,
   confirmDiscard,
   submitMulligan,
+  submitSideboard,
+  nextRound,
   devSkipSetup,
 } from '../controllers/game.controller'
 import { sendMessage, getLogs } from '../controllers/chat.controller'
@@ -26,6 +28,8 @@ router.post('/:gameId/rounds/:roundId/first-player', chooseFirstPlayer)
 router.post('/:gameId/rounds/:roundId/discard-battlefield', discardBattlefield)
 router.post('/:gameId/rounds/:roundId/discard-battlefield/confirm', confirmDiscard)
 router.post('/:gameId/rounds/:roundId/mulligan', submitMulligan)
+router.post('/:gameId/rounds/:roundId/sideboard', submitSideboard)
+router.post('/:gameId/rounds/:roundId/next-round', nextRound)
 router.post('/:gameId/messages', sendMessage)
 router.get('/:gameId/logs', getLogs)
 

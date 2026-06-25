@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import type { Card, GameSetupStep } from '@riftbound/shared'
+import { ref, computed, watch } from 'vue'
+import type { Card, DeckList, GameSetupStep } from '@riftbound/shared'
 import TitleOrnament from './TitleOrnament.vue'
 import ActionButton from './ActionButton.vue'
 import backCardBlack from '@/assets/img/back_card_black.png'
@@ -10,10 +10,15 @@ const props = defineProps<{
   battlefields: Card[]
   allDecksDone: boolean
   allBFDone: boolean
+  allSideboardDone: boolean
   importing: boolean
   importError: string | null
   isTied?: boolean
   myDiceRoll?: number | null
+  // sideboard
+  currentDeckList?: DeckList | null
+  mySideboardDone?: boolean
+  usedBattlefieldIds?: { cardId: string; round: number }[]
   // choose_first_player
   isDiceWinner?: boolean
   playerChoices?: { uid: string; label: string }[]
@@ -31,6 +36,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   importDeck: [text: string]
+  submitSideboard: [newDeckList: DeckList]
   selectBattlefield: [card: Card]
   reroll: []
   chooseFirstPlayer: [uid: string]
@@ -38,6 +44,69 @@ const emit = defineEmits<{
   confirmDiscard: []
   submitMulligan: [count: number]
 }>()
+
+// ── Sideboard ─────────────────────────────────────────────────────────────────
+
+// Group cards by base name with count
+function groupCards(cards: Card[]): { card: Card; count: number }[] {
+  const map = new Map<string, { card: Card; count: number }>()
+  for (const c of cards) {
+    const key = c.baseCardId
+    if (map.has(key)) map.get(key)!.count++
+    else map.set(key, { card: c, count: 1 })
+  }
+  return [...map.values()]
+}
+
+// Working copies of mainDeck and sideboard for the sideboard step
+const sideMainDeck = ref<Card[]>([])
+const sideSideboard = ref<Card[]>([])
+
+watch(
+  () => props.currentDeckList,
+  (dl) => {
+    if (!dl) return
+    sideMainDeck.value = [...dl.mainDeck]
+    sideSideboard.value = [...dl.sideboard]
+  },
+  { immediate: true },
+)
+
+const sideMainGroups = computed(() => groupCards(sideMainDeck.value))
+const sideSideGroups = computed(() => groupCards(sideSideboard.value))
+
+function lastIndexOf(arr: Card[], baseCardId: string): number {
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (arr[i].baseCardId === baseCardId) return i
+  }
+  return -1
+}
+
+// Move one copy of a card from main to sideboard
+function moveToSideboard(baseCardId: string) {
+  const idx = lastIndexOf(sideMainDeck.value, baseCardId)
+  if (idx === -1) return
+  const [card] = sideMainDeck.value.splice(idx, 1)
+  sideSideboard.value.push(card)
+}
+
+// Move one copy of a card from sideboard to main deck
+function moveToMain(baseCardId: string) {
+  const idx = lastIndexOf(sideSideboard.value, baseCardId)
+  if (idx === -1) return
+  const [card] = sideSideboard.value.splice(idx, 1)
+  sideMainDeck.value.push(card)
+}
+
+function confirmSideboard() {
+  if (!props.currentDeckList) return
+  const newDeckList: DeckList = {
+    ...props.currentDeckList,
+    mainDeck: [...sideMainDeck.value],
+    sideboard: [...sideSideboard.value],
+  }
+  emit('submitSideboard', newDeckList)
+}
 
 // ── Mulligan: local selection state ──────────────────────────────────────────
 const mulliganSelected = ref<Set<string>>(new Set())
@@ -94,6 +163,10 @@ Runes:
 // ── Step 2: Battlefield selection ─────────────────────────────────────────────
 const selectedBFId = ref<string | null>(null)
 
+function usedBfRound(bfId: string): number | null {
+  return props.usedBattlefieldIds?.find(u => u.cardId === bfId)?.round ?? null
+}
+
 </script>
 
 <template>
@@ -142,6 +215,86 @@ const selectedBFId = ref<string | null>(null)
     </div>
   </template>
 
+  <!-- ── Sideboard (round > 1) ─────────────────────────────────────────── -->
+  <template v-else-if="setup === 'sideboard'">
+    <div class="panel sideboard-panel">
+      <div class="panel__header">
+        <span class="panel__eyebrow">ROUND SUIVANT</span>
+        <h1 class="panel__title">RÉSERVE</h1>
+        <TitleOrnament />
+        <p class="panel__sub">Échangez des cartes entre votre deck et votre réserve avant la prochaine partie</p>
+      </div>
+
+      <div v-if="!mySideboardDone" class="sideboard-columns">
+        <!-- Main deck -->
+        <div class="sb-col">
+          <div class="sb-col__header">
+            <span class="sb-col__title">DECK PRINCIPAL</span>
+            <span class="sb-col__count">{{ sideMainDeck.length }}</span>
+          </div>
+          <div class="sb-list">
+            <button
+              v-for="{ card, count } in sideMainGroups"
+              :key="card.baseCardId"
+              class="sb-row sb-row--main"
+              @click="moveToSideboard(card.baseCardId)"
+            >
+              <span class="sb-row__arrow">→</span>
+              <span class="sb-row__count">×{{ count }}</span>
+              <img v-if="card.imageUrl" :src="card.imageUrl" class="sb-row__img" :alt="card.name" />
+              <span class="sb-row__name">{{ card.name }}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Sideboard -->
+        <div class="sb-col">
+          <div class="sb-col__header">
+            <span class="sb-col__title">RÉSERVE</span>
+            <span class="sb-col__count">{{ sideSideboard.length }}</span>
+          </div>
+          <div class="sb-list">
+            <div v-if="sideSideGroups.length === 0" class="sb-empty">Aucune carte en réserve</div>
+            <button
+              v-for="{ card, count } in sideSideGroups"
+              :key="card.baseCardId"
+              class="sb-row sb-row--side"
+              @click="moveToMain(card.baseCardId)"
+            >
+              <span class="sb-row__arrow">←</span>
+              <span class="sb-row__count">×{{ count }}</span>
+              <img v-if="card.imageUrl" :src="card.imageUrl" class="sb-row__img" :alt="card.name" />
+              <span class="sb-row__name">{{ card.name }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Waiting after confirming -->
+      <div v-else class="waiting-zone">
+        <p class="waiting-zone__msg">
+          Réserve confirmée — en attente des autres joueurs<span class="dots"><span>.</span><span>.</span><span>.</span></span>
+        </p>
+      </div>
+
+      <div class="panel__footer">
+        <div class="footer-hint">Cliquez sur une carte pour la déplacer</div>
+        <div>
+          <ActionButton
+            v-if="!mySideboardDone"
+            variant="primary"
+            @click="confirmSideboard"
+          >
+            CONFIRMER LA RÉSERVE
+          </ActionButton>
+          <ActionButton v-else variant="locked">
+            EN ATTENTE DES JOUEURS
+          </ActionButton>
+        </div>
+      </div>
+    </div>
+  </template>
+
   <!-- ── Step 2: Battlefield selection ──────────────────────────────────── -->
   <template v-else-if="setup === 'select_battlefield'">
     <div class="panel">
@@ -157,8 +310,12 @@ const selectedBFId = ref<string | null>(null)
           v-for="bf in battlefields"
           :key="bf.id"
           class="bf-card"
-          :class="{ 'bf-card--selected': selectedBFId === bf.id }"
-          @click="selectedBFId = bf.id; emit('selectBattlefield', bf)"
+          :class="{
+            'bf-card--selected': selectedBFId === bf.id,
+            'bf-card--used': usedBfRound(bf.id) !== null,
+          }"
+          :disabled="usedBfRound(bf.id) !== null"
+          @click="usedBfRound(bf.id) === null && (selectedBFId = bf.id, emit('selectBattlefield', bf))"
         >
           <div class="bf-card__img">
             <img v-if="bf.imageUrl" :src="bf.imageUrl" :alt="bf.name" class="bf-card__img-el" />
@@ -167,6 +324,9 @@ const selectedBFId = ref<string | null>(null)
             </svg>
           </div>
           <span class="bf-card__name">{{ bf.name }}</span>
+          <span v-if="usedBfRound(bf.id) !== null" class="bf-card__used-badge">
+            Utilisé — Round {{ usedBfRound(bf.id) }}
+          </span>
         </button>
       </div>
 
@@ -673,6 +833,131 @@ const selectedBFId = ref<string | null>(null)
 }
 
 .bf-card--selected .bf-card__name { color: #C8AA6E; }
+
+.bf-card--used {
+  opacity: 0.38;
+  cursor: not-allowed;
+  pointer-events: none;
+  position: relative;
+}
+.bf-card__used-badge {
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #e06060;
+  background: rgba(200, 60, 60, 0.12);
+  border: 1px solid rgba(200, 60, 60, 0.3);
+  padding: 0.15rem 0.4rem;
+  border-radius: 2px;
+  margin-top: 0.25rem;
+}
+
+/* ── Sideboard ── */
+.sideboard-panel .panel__header { padding-bottom: 0.5rem; }
+
+.sideboard-columns {
+  display: flex;
+  gap: 1rem;
+  flex: 1;
+  min-height: 0;
+  padding: 0 1rem;
+  width: 100%;
+}
+
+.sb-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: rgba(6, 15, 27, 0.6);
+  border: 1px solid rgba(200, 170, 110, 0.1);
+}
+
+.sb-col__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid rgba(200, 170, 110, 0.1);
+  flex-shrink: 0;
+}
+.sb-col__title {
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #C8AA6E;
+}
+.sb-col__count {
+  font-size: 0.55rem;
+  font-weight: 700;
+  color: #4a6a70;
+}
+
+.sb-list {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(200, 170, 110, 0.15) transparent;
+  padding: 0.25rem 0;
+}
+
+.sb-empty {
+  font-size: 0.6rem;
+  color: #2a4a50;
+  text-align: center;
+  padding: 1.5rem 0;
+}
+
+.sb-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.3rem 0.6rem;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.sb-row:hover { background: rgba(200, 170, 110, 0.06); }
+.sb-row:active { background: rgba(200, 170, 110, 0.12); }
+
+.sb-row__arrow {
+  font-size: 0.6rem;
+  width: 0.9rem;
+  flex-shrink: 0;
+}
+.sb-row--main .sb-row__arrow { color: #C8AA6E; }
+.sb-row--side .sb-row__arrow { color: #6aabb0; }
+
+.sb-row__count {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #4a6a70;
+  width: 1.4rem;
+  flex-shrink: 0;
+}
+
+.sb-row__img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.sb-row__name {
+  font-size: 0.65rem;
+  color: #8aabb0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sb-row:hover .sb-row__name { color: #F2E5CD; }
 
 /* Waiting zone */
 .waiting-zone {

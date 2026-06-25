@@ -116,6 +116,36 @@ export async function confirmDiscard(req: Request, res: Response, next: NextFunc
   }
 }
 
+export async function submitSideboard(req: Request, res: Response, next: NextFunction) {
+  try {
+    const uid = req.user!.uid
+    const gameId = param(req.params.gameId)
+    const roundId = param(req.params.roundId)
+    const { newDeckList } = req.body
+    if (!newDeckList) { res.status(400).json({ error: 'Missing newDeckList' }); return }
+    await gameService.submitSideboard(gameId, roundId, uid, newDeckList)
+    res.status(204).send()
+  } catch (err: any) {
+    if (err.status) { res.status(err.status).json({ error: err.message }); return }
+    next(err)
+  }
+}
+
+export async function nextRound(req: Request, res: Response, next: NextFunction) {
+  try {
+    const uid = req.user!.uid
+    const gameId = param(req.params.gameId)
+    const roundId = param(req.params.roundId)
+    const { winnerId } = req.body
+    if (!winnerId) { res.status(400).json({ error: 'Missing winnerId' }); return }
+    await gameService.nextRound(gameId, roundId, uid, winnerId)
+    res.status(204).send()
+  } catch (err: any) {
+    if (err.status) { res.status(err.status).json({ error: err.message }); return }
+    next(err)
+  }
+}
+
 export async function devSkipSetup(req: Request, res: Response, next: NextFunction) {
   try {
     const gameId = param(req.params.gameId)

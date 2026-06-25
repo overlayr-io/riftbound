@@ -40,6 +40,7 @@ export interface Game {
   deckFormat: GameDeckFormat
 
   players: Map<PlayerId, GamePlayer>
+  roundResults: { round: number; winnerId: PlayerId }[]
 
   createdAt: Date
   updatedAt: Date
@@ -49,6 +50,7 @@ export interface Game {
 
 export type GameSetupStep =
   | 'deck_selection'
+  | 'sideboard'
   | 'select_battlefield'
   | 'dice_roll'
   | 'select_battlefield_discard' //only for 4-player
@@ -62,6 +64,7 @@ export interface GameRound {
   round: number
 
   previousRound: string | null
+  usedBattlefields: Record<PlayerId, { cardId: CardId; round: number }[]> | null
 
   setup: GameSetupStep
   diceWinnerId: PlayerId | null

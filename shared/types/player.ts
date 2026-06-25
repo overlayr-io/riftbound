@@ -21,4 +21,5 @@ export interface PlayerState {
   diceRoll: number | null
   mulliganCount: number | null
   mulliganDone: boolean
+  sideboardDone: boolean
 }

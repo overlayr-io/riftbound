@@ -6,18 +6,19 @@ import type { PlayerId, PlayerState } from '@riftbound/shared'
 import { db } from '../config/firebase'
 import { FieldValue } from 'firebase-admin/firestore'
 
-function makeInitialPlayerState(playerId: PlayerId): PlayerState {
+function makeInitialPlayerState(playerId: PlayerId, deckList: DeckList | null = null): PlayerState {
   return {
     playerId,
     score: 0,
-    hasSubmittedDeck: false,
-    deckList: null,
-    legendCard: null,
+    hasSubmittedDeck: deckList !== null,
+    deckList,
+    legendCard: deckList?.legend ?? null,
     submittedBattlefield: null,
     battlefieldCard: null,
     diceRoll: null,
     mulliganCount: null,
     mulliganDone: false,
+    sideboardDone: false,
   }
 }
 
@@ -27,6 +28,7 @@ function docToRound(id: string, data: FirebaseFirestore.DocumentData): GameRound
     gameId: data.gameId,
     round: data.round,
     previousRound: data.previousRound ?? null,
+    usedBattlefields: data.usedBattlefields ?? null,
     setup: data.setup,
     diceWinnerId: data.diceWinnerId ?? null,
     tiedPlayerIds: data.tiedPlayerIds ?? null,
@@ -275,11 +277,124 @@ export class GameRepository {
     return (snap.data()?.mode as GameMode) ?? 'dual'
   }
 
+  async createNextRound(params: {
+    gameId: string
+    previousRoundId: string
+    previousRoundWinnerId: PlayerId
+    roundNumber: number
+    playerIds: PlayerId[]
+    diceWinnerId: PlayerId
+    upgradeMatchFormat?: GameMatchFormat
+  }): Promise<{ roundId: string }> {
+    const now = FieldValue.serverTimestamp()
+    const gameRef = this.col.doc(params.gameId)
+    const newRoundRef = gameRef.collection('rounds').doc()
+
+    // Fetch previous round to carry over deck lists and used battlefields
+    const prevSnap = await gameRef.collection('rounds').doc(params.previousRoundId).get()
+    const prevData = prevSnap.data() ?? {}
+    const prevPlayers = prevData.players as Record<PlayerId, PlayerState> | undefined
+    const prevUsedBattlefields = (prevData.usedBattlefields ?? {}) as Record<PlayerId, { cardId: CardId; round: number }[]>
+
+    // Accumulate used battlefields: prev entries + each player's BF from previous round
+    const usedBattlefields: Record<PlayerId, { cardId: CardId; round: number }[]> = {}
+    for (const uid of params.playerIds) {
+      const prev = prevUsedBattlefields[uid] ?? []
+      const prevBfId = prevPlayers?.[uid]?.battlefieldCard?.id
+      usedBattlefields[uid] = prevBfId
+        ? [...prev, { cardId: prevBfId, round: params.roundNumber - 1 }]
+        : prev
+    }
+
+    const playerStates: Record<PlayerId, PlayerState> = {}
+    for (const uid of params.playerIds) {
+      // Carry over previous deck list so players start sideboard with their last deck
+      playerStates[uid] = makeInitialPlayerState(uid, prevPlayers?.[uid]?.deckList ?? null)
+    }
+
+    const batch = db.batch()
+
+    // Mark previous round as ended with its winner
+    batch.update(gameRef.collection('rounds').doc(params.previousRoundId), {
+      winnerId: params.previousRoundWinnerId,
+      endedAt: now,
+      updatedAt: now,
+    })
+
+    // Create new round — dice winner pre-set so dice_roll step is skipped
+    batch.set(newRoundRef, {
+      gameId: params.gameId,
+      round: params.roundNumber,
+      previousRound: params.previousRoundId,
+      usedBattlefields,
+      setup: 'sideboard' as GameSetupStep,
+      diceWinnerId: params.diceWinnerId,
+      tiedPlayerIds: null,
+      firstPlayerId: null,
+      discardedBattlefieldId: null,
+      bfDisplayOrder: null,
+      winnerId: null,
+      currentTurn: null,
+      players: playerStates,
+      cards: {},
+      updatedAt: now,
+      endedAt: null,
+    })
+
+    // Update game's current round (and optionally upgrade match format)
+    const gameUpdate: Record<string, unknown> = {
+      currentRoundId: newRoundRef.id,
+      updatedAt: now,
+      // Append round result for the score display (squares win/loss in sidebar)
+      roundResults: FieldValue.arrayUnion({
+        round: params.roundNumber - 1,
+        winnerId: params.previousRoundWinnerId,
+      }),
+    }
+    if (params.upgradeMatchFormat) {
+      gameUpdate.matchFormat = params.upgradeMatchFormat
+    }
+    batch.update(gameRef, gameUpdate)
+
+    await batch.commit()
+    return { roundId: newRoundRef.id }
+  }
+
   async get(gameId: string): Promise<{ playerIds: PlayerId[]; playerNames: Record<PlayerId, { name: string; teamId: '1' | '2' | null }> } | null> {
     const snap = await this.col.doc(gameId).get()
     if (!snap.exists) return null
     const d = snap.data()!
     return { playerIds: d.playerIds ?? [], playerNames: d.playerNames ?? {} }
+  }
+
+  async submitSideboard(
+    gameId: string,
+    roundId: string,
+    uid: PlayerId,
+    newDeckList: DeckList,
+  ): Promise<void> {
+    const roundRef = this.col.doc(gameId).collection('rounds').doc(roundId)
+    await roundRef.update({
+      [`players.${uid}.deckList`]: newDeckList,
+      [`players.${uid}.legendCard`]: newDeckList.legend,
+      [`players.${uid}.sideboardDone`]: true,
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+
+    const snap = await roundRef.get()
+    if (!snap.exists) return
+    const players = snap.data()!.players as Record<PlayerId, PlayerState>
+    const allDone = Object.values(players).every((p) => p.sideboardDone)
+    if (allDone) {
+      await roundRef.update({ setup: 'select_battlefield' as GameSetupStep, updatedAt: FieldValue.serverTimestamp() })
+    }
+  }
+
+  async getGameData(gameId: string): Promise<{ matchFormat: GameMatchFormat } | null> {
+    const snap = await this.col.doc(gameId).get()
+    if (!snap.exists) return null
+    const d = snap.data()!
+    return { matchFormat: d.matchFormat ?? 'BO1' }
   }
 
   async devSkipSetup(

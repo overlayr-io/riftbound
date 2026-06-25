@@ -21,6 +21,7 @@ export const useGameStore = defineStore('game', () => {
   const deckFormat = ref<GameDeckFormat | null>(null)
   const playerIds = ref<PlayerId[]>([])
   const playerNames = ref<Record<PlayerId, { name: string; teamId: '1' | '2' | null }>>({})
+  const roundResults = ref<{ round: number; winnerId: PlayerId }[]>([])
   const currentRoundId = ref<string | null>(null)
 
   // ── Current round ────────────────────────────────────────────────────────────
@@ -78,6 +79,12 @@ export const useGameStore = defineStore('game', () => {
       : false,
   )
 
+  const allSideboardDone = computed(() =>
+    currentRound.value
+      ? Object.values(currentRound.value.players).every((p) => p.sideboardDone)
+      : false,
+  )
+
   const tiedPlayerIds = computed(() => currentRound.value?.tiedPlayerIds ?? null)
 
   const bfDisplayOrder = computed(() => currentRound.value?.bfDisplayOrder ?? null)
@@ -98,6 +105,7 @@ export const useGameStore = defineStore('game', () => {
           gameId: d.gameId,
           round: d.round,
           previousRound: d.previousRound ?? null,
+          usedBattlefields: d.usedBattlefields ?? null,
           setup: d.setup,
           diceWinnerId: d.diceWinnerId ?? null,
           tiedPlayerIds: d.tiedPlayerIds ?? null,
@@ -111,6 +119,11 @@ export const useGameStore = defineStore('game', () => {
           showdowns: d.showdowns ?? {},
           updatedAt: d.updatedAt?.toDate() ?? new Date(),
           endedAt: d.endedAt?.toDate() ?? null,
+        }
+        // On sideboard step, deck was carried over from previous round — load it locally
+        const uid = myUid.value
+        if (d.setup === 'sideboard' && uid && !myDeck.value) {
+          myDeck.value = d.players?.[uid]?.deckList ?? null
         }
       },
       (err) => console.error('[round] listener error', err),
@@ -130,6 +143,7 @@ export const useGameStore = defineStore('game', () => {
         deckFormat.value = d.deckFormat
         playerIds.value = d.playerIds ?? []
         playerNames.value = d.playerNames ?? {}
+        roundResults.value = d.roundResults ?? []
 
         const newRoundId: string = d.currentRoundId
         if (newRoundId && newRoundId !== currentRoundId.value) {
@@ -152,6 +166,7 @@ export const useGameStore = defineStore('game', () => {
     currentRound.value = null
     playerIds.value = []
     playerNames.value = {}
+    roundResults.value = []
     myDeck.value = null
     importing.value = false
     importError.value = null
@@ -927,6 +942,17 @@ export const useGameStore = defineStore('game', () => {
     writeLog(`${actorName(uid)} passe le tour`, uid)
   }
 
+  async function submitSideboard(newDeckList: DeckList) {
+    if (!gameId.value || !currentRoundId.value) return
+    await gameApi.submitSideboard(gameId.value, currentRoundId.value, newDeckList)
+    myDeck.value = newDeckList
+  }
+
+  async function startNextRound(winnerId: PlayerId) {
+    if (!gameId.value || !currentRoundId.value) return
+    await gameApi.nextRound(gameId.value, currentRoundId.value, winnerId)
+  }
+
   function setScore(playerId: PlayerId, score: number) {
     const round = currentRound.value
     const ref = roundRef()
@@ -946,6 +972,7 @@ export const useGameStore = defineStore('game', () => {
     mode,
     matchFormat,
     deckFormat,
+    roundResults,
     playerIds,
     playerNames,
     currentRoundId,
@@ -960,6 +987,7 @@ export const useGameStore = defineStore('game', () => {
     allDecksDone,
     allBFDone,
     allDiceRolled,
+    allSideboardDone,
     tiedPlayerIds,
     bfDisplayOrder,
     attachGame,
@@ -981,6 +1009,8 @@ export const useGameStore = defineStore('game', () => {
     createToken,
     addToStack,
     destroyToken,
+    submitSideboard,
+    startNextRound,
     setScore,
     setShowdown,
     clearShowdown,

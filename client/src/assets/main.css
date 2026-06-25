@@ -1,7 +1,8 @@
 @import "tailwindcss";
 
 :root {
-    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-duration: 420ms;
 }
 
 *, *::before, *::after {
