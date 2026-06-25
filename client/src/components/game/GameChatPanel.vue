@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
 import dayjs from 'dayjs'
 import { OUTSIDE_MARGIN, INSIDE_MARGIN, DEFAULT_CARD_RATIO, useCardSize } from '@/composables/useCardSize'
 import { useViewport } from '@/composables/useViewport'
@@ -44,11 +44,27 @@ watch(messages, async () => {
 }, { deep: true })
 
 // ── Logs ──────────────────────────────────────────────────────────────────────
-const { logs, loading: logsLoading, fetchLogs } = useGameLogs(() => props.gameId)
+const { logs, loading: logsLoading, fetchLogs, subscribe, unsubscribe } = useGameLogs(() => props.gameId)
+const logsEl = ref<HTMLElement | null>(null)
 
-watch(activeTab, tab => {
-  if (tab === 'logs') fetchLogs()
+// Local player (myUid present) → reactive onSnapshot while tab is open.
+// Remote player (no myUid) → one-time fetch on tab open.
+watch([activeTab, () => props.open], ([tab, open]) => {
+  if (tab === 'logs' && open) {
+    if (props.myUid) subscribe()
+    else fetchLogs()
+  } else {
+    unsubscribe()
+  }
 })
+
+// Auto-scroll logs to bottom on new entries
+watch(logs, async () => {
+  await nextTick()
+  if (logsEl.value) logsEl.value.scrollTop = logsEl.value.scrollHeight
+}, { deep: true })
+
+onUnmounted(() => unsubscribe())
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function formatTime(date: Date | null | undefined): string {
@@ -115,7 +131,7 @@ function formatTime(date: Date | null | undefined): string {
 
         <!-- Logs tab -->
         <template v-else>
-          <div class="chat-messages">
+          <div ref="logsEl" class="chat-messages">
             <div v-if="logsLoading" class="chat-empty">Chargement...</div>
             <div v-else class="flex flex-col gap-1 p-2">
               <div v-for="log in logs" :key="log.logId" class="log-entry">

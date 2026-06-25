@@ -17,24 +17,18 @@ const emit = defineEmits<{
   done: []
 }>()
 
-const PRESENTATION_MS = 2500
-
 const phase = ref<'center' | 'docked'>('center')
-let timer: ReturnType<typeof setTimeout> | null = null
 
 watch(
   () => props.cards.map(c => c.cardId).join(','),
   (key) => {
-    if (timer) { clearTimeout(timer); timer = null }
     if (!key) return
     phase.value = 'center'
-    timer = setTimeout(() => { phase.value = 'docked' }, PRESENTATION_MS)
   },
   { immediate: true },
 )
 
 function closeEarly() {
-  if (timer) { clearTimeout(timer); timer = null }
   emit('done')
 }
 </script>
@@ -57,7 +51,7 @@ function closeEarly() {
           </div>
           <button class="rb-center-close" @click="closeEarly()" aria-label="Fermer">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
-            Je ferme
+            Fermer
           </button>
         </div>
       </Transition>

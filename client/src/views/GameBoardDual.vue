@@ -251,7 +251,6 @@ const trayOriginalDeck = ref<string[]>([])
 // Per-session counters for the closing log summary.
 let trayLookedCount = 0
 let trayHandCount = 0
-let trayRevealedCount = 0
 
 const trayCards = computed<CardState[]>(() =>
   trayCardIds.value
@@ -262,7 +261,7 @@ const trayCards = computed<CardState[]>(() =>
 function openTray(count: number, mode: 'vision' | 'reveal') {
   const key = deckMenuKey.value
   if (!key) return
-  const { owner, zone } = parseZoneKey(key)
+  const { zone } = parseZoneKey(key)
   const top = deckCardsSorted(key).slice(0, count)
   if (!top.length) return
 
@@ -271,20 +270,18 @@ function openTray(count: number, mode: 'vision' | 'reveal') {
   trayOriginalDeck.value = deckCardsSorted(key).map(c => c.cardId)
   trayLookedCount = top.length
   trayHandCount = 0
-  trayRevealedCount = 0
   trayOpen.value = true
-
-  if (mode === 'vision') {
-    // Live anti-cheat presence: opponents see a halo + count on this deck.
-    deckVision.setVisionPresence(top.length)
-  } else {
-    // Reveal: flip the cards face-up for everyone, then broadcast the banner.
-    for (const card of top) {
-      store.applyAction({ type: 'REVEAL_CARD', playerId: owner ?? '', cardId: card.cardId })
-    }
-    deckVision.broadcastReveal(top.map(c => c.cardId))
-  }
   void zone
+
+  const uid = store.myUid ?? ''
+  const who = store.actorName(uid)
+  if (mode === 'vision') {
+    deckVision.setVisionPresence(top.length)
+    store.writeLog(`${who} fait une vision sur ${top.length} carte${top.length > 1 ? 's' : ''} du dessus de son deck`, uid)
+  } else {
+    deckVision.broadcastReveal(top.map(c => c.cardId))
+    store.writeLog(`${who} révèle ${top.length} carte${top.length > 1 ? 's' : ''} à l'adversaire`, uid)
+  }
 }
 
 function onDeckVision(count: number) { openTray(count, 'vision') }
@@ -292,21 +289,28 @@ function onDeckReveal(count: number) { openTray(count, 'reveal') }
 
 function onTrayAction(cardId: string, action: 'top' | 'bottom' | 'hand' | 'reveal' | 'discard') {
   const uid = store.myUid ?? ''
+  const who = store.actorName(uid)
   switch (action) {
     case 'top':
-      // Silent: do not leak the card name to opponents via the log.
       store.sendToDeck(cardId, 'main_deck', 'top', trayMode.value === 'vision')
+      if (trayMode.value === 'vision') store.writeLog(`${who} a replacé une carte sur le dessus de son deck`, uid)
       break
     case 'bottom':
       store.sendToDeck(cardId, 'main_deck', 'bottom', trayMode.value === 'vision')
+      if (trayMode.value === 'vision') store.writeLog(`${who} a replacé une carte sous son deck`, uid)
       break
     case 'hand':
-      if (trayMode.value === 'vision') store.moveToHandSilent(cardId)
-      else store.applyAction({ type: 'MOVE_TO_HAND', playerId: uid, cardId, fromZoneId: 'main_deck' })
+      if (trayMode.value === 'vision') {
+        store.moveToHandSilent(cardId)
+        // hand count tracked, logged in closeTray summary
+      } else {
+        store.applyAction({ type: 'MOVE_TO_HAND', playerId: uid, cardId, fromZoneId: 'main_deck' })
+      }
       trayHandCount++
       break
     case 'reveal':
-      // "Révélé" est uniquement un label de contexte dans la fenêtre — aucune action en jeu.
+      deckVision.broadcastReveal([cardId])
+      store.writeLog(`${who} a montré une carte à l'adversaire`, uid)
       break
     case 'discard':
       store.applyAction({ type: 'DISCARD_CARD', playerId: uid, cardId, fromZoneId: 'main_deck' })
@@ -329,7 +333,6 @@ function trayRevealedIds(): string[] {
 function closeTray() {
   const uid = store.myUid ?? ''
   if (trayMode.value === 'vision' && trayLookedCount > 0) {
-    store.writeLog(`${store.actorName(uid)} a regardé ${trayLookedCount} carte(s) du dessus de son deck`, uid)
     const key = deckMenuKey.value
     const reordered = key
       ? deckCardsSorted(key).map(c => c.cardId).join(',') !== trayOriginalDeck.value.join(',')
@@ -360,12 +363,14 @@ function onTrayAddOne() {
   if (!next) return
   trayCardIds.value = [...trayCardIds.value, next.cardId]
   trayLookedCount++
+  const uid = store.myUid ?? ''
+  const who = store.actorName(uid)
   if (trayMode.value === 'reveal') {
-    const { owner } = parseZoneKey(key)
-    store.applyAction({ type: 'REVEAL_CARD', playerId: owner ?? '', cardId: next.cardId })
     deckVision.broadcastReveal([...trayRevealedIds(), next.cardId])
+    store.writeLog(`${who} a révélé une carte supplémentaire à l'adversaire`, uid)
   } else {
     deckVision.setVisionPresence(trayCardIds.value.length)
+    store.writeLog(`${who} a regardé une carte supplémentaire du dessus de son deck`, uid)
   }
 }
 
@@ -396,6 +401,8 @@ function onDeckDraw(count: number) {
 
 // ── Reveal banner (opponents' view of other players' reveals) ──────────────────
 
+const revealDismissedKey = ref<string | null>(null)
+
 const incomingReveal = computed(() => {
   const myId = store.myUid
   for (const ev of Object.values(deckVision.reveals.value)) {
@@ -407,6 +414,8 @@ const incomingReveal = computed(() => {
 const incomingRevealCards = computed<CardState[]>(() => {
   const ev = incomingReveal.value
   if (!ev) return []
+  const key = ev.playerId + ':' + ev.ts
+  if (key === revealDismissedKey.value) return []
   return ev.cardIds
     .map(id => store.currentRound?.cards[id])
     .filter((c): c is CardState => !!c)
@@ -422,9 +431,13 @@ const revealAnchor = computed(() => {
 })
 
 function dismissReveal() {
-  // Only the revealer can clear their own broadcast; opponents just hide locally.
   const ev = incomingReveal.value
-  if (ev && ev.playerId === store.myUid) deckVision.clearReveal()
+  if (!ev) return
+  if (ev.playerId === store.myUid) {
+    deckVision.clearReveal()
+  } else {
+    revealDismissedKey.value = ev.playerId + ':' + ev.ts
+  }
 }
 
 function isClickableZone(key: string): boolean {
