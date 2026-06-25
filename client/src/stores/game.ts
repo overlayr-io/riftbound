@@ -253,6 +253,12 @@ export const useGameStore = defineStore('game', () => {
     const uid = myUid.value
     if (uid) writeLog(`${actorName(uid)} a résolu ${card.description?.name ?? 'une carte'} depuis le stack`, uid)
 
+    // Stack copies are destroyed on resolve rather than moved to discard
+    if (card.isStackCopy) {
+      destroyToken(card.cardId)
+      return
+    }
+
     const discardCards = Object.values(round.cards).filter(c => c.zoneId === 'discard')
     const newOrder = Math.max(-1, ...discardCards.map(c => c.order)) + 1
 
@@ -352,6 +358,12 @@ export const useGameStore = defineStore('game', () => {
     if (!round?.cards[cardId]) return
     const ref = roundRef()
     if (!ref) return
+
+    // Stack copies are destroyed on any move out of the stack
+    if (round.cards[cardId].isStackCopy && round.cards[cardId].zoneId === 'stack') {
+      destroyToken(cardId)
+      return
+    }
 
     // Tokens are destroyed when leaving the board
     if (round.cards[cardId].isToken && TOKEN_DESTROY_ZONES.has(toZoneId)) {
@@ -526,6 +538,48 @@ export const useGameStore = defineStore('game', () => {
 
     updateDoc(ref, {
       [`cards.${cardId}`]: newCard,
+      _updatedBy: sessionId,
+      updatedAt: serverTimestamp(),
+    }).catch(console.error)
+  }
+
+  function addToStack(sourceCardId: string) {
+    const round = currentRound.value
+    const ref = roundRef()
+    const uid = myUid.value
+    if (!round || !ref || !uid) return
+
+    const source = round.cards[sourceCardId]
+    if (!source) return
+
+    const stackCardId = `stack_${uid}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+    const stackCards = Object.values(round.cards).filter(c => c.zoneId === 'stack')
+    const order = Math.max(-1, ...stackCards.map(c => c.order)) + 1
+
+    const copy: CardState = {
+      ...source,
+      cardId: stackCardId,
+      ownerId: uid,
+      controllerId: uid,
+      zoneId: 'stack',
+      order,
+      isToken: true,
+      isStackCopy: true,
+      state: {
+        exhausted: false,
+        counters: null,
+        damages: null,
+        buffs: null,
+        visibleTo: 'ALL',
+        groupTo: [],
+      },
+    }
+
+    round.cards[stackCardId] = copy
+    writeLog(`${actorName(uid)} a mis ${cardName(sourceCardId)} sur le stack`, uid)
+
+    updateDoc(ref, {
+      [`cards.${stackCardId}`]: copy,
       _updatedBy: sessionId,
       updatedAt: serverTimestamp(),
     }).catch(console.error)
@@ -743,6 +797,7 @@ export const useGameStore = defineStore('game', () => {
     devSkipSetup,
     applyAction,
     createToken,
+    addToStack,
     destroyToken,
     setScore,
   }

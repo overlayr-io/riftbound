@@ -64,6 +64,10 @@ const runeTokenOpacity = computed(() =>
   props.card.isToken && props.card.description.type === 'rune' ? 0.7 : 1
 )
 
+const stackCopyFilter = computed(() =>
+  props.card.isStackCopy ? 'grayscale(60%) brightness(0.85)' : undefined
+)
+
 const style = computed(() => {
   if (!isOwned.value) {
     const L = props.layout
@@ -73,13 +77,16 @@ const style = computed(() => {
       height: L.h + 'px',
       zIndex: L.z,
       opacity: runeTokenOpacity.value,
-      // Explicit transition so opponent card movements animate when Firestore updates
+      filter: stackCopyFilter.value,
       transition: 'transform 0.3s var(--ease)',
     }
   }
 
   if (isBeingDragged.value && drag?.dragging.value) {
     const d = drag.dragging.value
+    const dragFilter = isDropInvalid.value
+      ? 'drop-shadow(0 8px 16px rgba(255,60,60,0.5))'
+      : 'drop-shadow(0 12px 24px rgba(0,0,0,0.5))'
     return {
       transform: `translate3d(${d.x}px, ${d.y}px, 0)${rotStr(d.rotation, d.cssRotation)} scale(1.04)`,
       width: d.w + 'px',
@@ -87,15 +94,18 @@ const style = computed(() => {
       zIndex: 9999,
       transition: 'none',
       cursor: isDropInvalid.value ? 'not-allowed' : 'grabbing',
-      filter: isDropInvalid.value
-        ? 'drop-shadow(0 8px 16px rgba(255,60,60,0.5))'
-        : 'drop-shadow(0 12px 24px rgba(0,0,0,0.5))',
+      filter: [stackCopyFilter.value, dragFilter].filter(Boolean).join(' '),
     }
   }
 
   const L = props.layout
   const isInHand = props.card.zoneId === 'hand' && isOwned.value
   const liftY = isInHand && isHovered.value && !isBeingDragged.value ? -24 : 0
+
+  const shortcutHoverFilter = isOwned.value && activeKey.value && isHovered.value
+    ? 'drop-shadow(0 0 10px rgba(192, 57, 43, 0.6))'
+    : undefined
+  const baseFilter = [stackCopyFilter.value, shortcutHoverFilter].filter(Boolean).join(' ') || undefined
 
   return {
     transform: `translate3d(${L.x}px, ${L.y + liftY}px, 0)${rotStr(L.rotation, L.cssRotation)}`,
@@ -104,9 +114,7 @@ const style = computed(() => {
     zIndex: L.z,
     opacity: runeTokenOpacity.value,
     cursor: isOwned.value && activeKey.value ? 'crosshair' : undefined,
-    filter: isOwned.value && activeKey.value && isHovered.value
-      ? 'drop-shadow(0 0 10px rgba(192, 57, 43, 0.6))'
-      : undefined,
+    filter: baseFilter,
   }
 })
 

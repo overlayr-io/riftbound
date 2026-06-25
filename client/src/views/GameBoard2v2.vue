@@ -22,6 +22,13 @@ shortcuts.define({
     store.applyAction({ type: 'DISCARD_CARD', playerId: card.controllerId, cardId: card.cardId, fromZoneId: card.zoneId })
   },
 })
+
+shortcuts.define({
+  key: 's',
+  hint: 'Choisi la carte à mettre sur le stack',
+  cardTarget: 'single',
+  onSelect: (card) => { store.addToStack(card.cardId) },
+})
 const { playerIds } = store
 const { zones, layouts, playersZone } = useLayout([])
 const { width: vw, height: vh } = useViewport()

@@ -43,6 +43,8 @@ export interface CardState {
   }
 
   isToken: boolean
+  /** True when this card is a temporary stack copy — destroyed on any move out of the stack zone. */
+  isStackCopy?: boolean
 }
 
 

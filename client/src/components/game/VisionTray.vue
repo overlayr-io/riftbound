@@ -160,6 +160,7 @@ function title() {
   transition: background 0.1s, color 0.1s;
 }
 .vt-ghost-restore:hover { background: rgba(90, 140, 200, 0.2); color: #aed0f5; }
+.vt-tray--ghost .vt-ghost-restore { pointer-events: auto; }
 
 .vt-ghost-btn {
   width: 22px;

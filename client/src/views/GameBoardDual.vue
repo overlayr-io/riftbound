@@ -120,6 +120,13 @@ shortcuts.define({
 })
 
 shortcuts.define({
+  key: 's',
+  hint: 'Choisi la carte à mettre sur le stack',
+  cardTarget: 'single',
+  onSelect: (card) => { store.addToStack(card.cardId) },
+})
+
+shortcuts.define({
   key: 'g',
   hint: 'Clique la carte parent',
   cardTarget: 'sequence',
