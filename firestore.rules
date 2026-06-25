@@ -1,0 +1,61 @@
+rules_version = '2';
+
+// Règles Firestore — Phase 0 RBAC.
+// Principe : le serveur (firebase-admin) bypasse ces règles ; elles protègent
+// les accès DIRECTS du client. Le jeu existant écrit directement → on préserve
+// son accès en exigeant l'authentification (garantie par l'auth anonyme).
+// Les collections admin sont gatées par le custom claim `role`.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return isSignedIn() ? request.auth.token.get('role', null) : null;
+    }
+
+    function isAdmin() {
+      return role() in ['super_admin', 'moderator', 'support', 'viewer'];
+    }
+
+    function canReadAudit() {
+      return role() in ['super_admin', 'moderator', 'support'];
+    }
+
+    // ── Jeu existant : accès préservé (authentifié) ──────────────────────────
+    match /lobbies/{lobbyId} {
+      allow read, write: if isSignedIn();
+      match /{document=**} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
+    match /games/{gameId} {
+      allow read, write: if isSignedIn();
+      match /{document=**} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
+    // ── Profils utilisateurs (provisionnés côté serveur uniquement) ──────────
+    match /users/{uid} {
+      // Lecture : son propre profil, ou tout admin.
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      // Écriture réservée au serveur (admin SDK) → refus client.
+      allow write: if false;
+    }
+
+    // ── Audit log (écrit par le serveur) ─────────────────────────────────────
+    match /auditLogs/{entryId} {
+      allow read: if canReadAudit();
+      allow write: if false;
+    }
+
+    // Refus par défaut pour tout chemin non couvert.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

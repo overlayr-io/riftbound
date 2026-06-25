@@ -13,7 +13,9 @@
     "deploy:client": "npm run build --workspace=client && firebase deploy --only hosting",
     "deploy:server": "npm run build --workspace=server",
     "kill-ports": "lsof -ti:3000,4000,5000,5001,5173,8080,9000,9099 | xargs kill -9 2>/dev/null; echo 'Ports freed'",
-    "dev:clean": "npm run kill-ports && npm run dev"
+    "dev:clean": "npm run kill-ports && npm run dev",
+    "seed:admin": "node scripts/seed-admin.mjs",
+    "seed:games": "node scripts/seed-games.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.0.0",
