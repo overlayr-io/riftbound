@@ -248,7 +248,11 @@ export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
       }
     }
 
-    const hasBaronNashor = false
+    const BARON_INACTIVE_ZONES = new Set(['main_deck', 'hand', 'runes_deck'])
+    const hasBaronNashor = toValue(cards).some(c =>
+      c.description.name === 'Baron Nashor' &&
+      !BARON_INACTIVE_ZONES.has(c.zoneId)
+    )
     const bfCount = hasBaronNashor ? 3 : 2
     const bfW = (W.value - OUTSIDE_MARGIN - LEFT_X - bfCount * GAP - STACK.w) / bfCount
 

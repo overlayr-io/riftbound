@@ -49,10 +49,14 @@ const isArrowSource = computed(() =>
 )
 const isArrowMode = computed(() => pingArrow?.isArrowMode.value ?? false)
 
+const OWNER_ONLY_ZONES = new Set(['discard', 'banish'])
+
 const canSeeFront = computed(() => {
   const v = props.card.state.visibleTo
-  if (v === 'ALL') return true
   if (v === 'NOBODY') return false
+  // Discard and banish are face-down to the opponent regardless of visibleTo
+  if (OWNER_ONLY_ZONES.has(props.card.zoneId) && props.card.controllerId !== props.currentPlayerId) return false
+  if (v === 'ALL') return true
   return props.card.controllerId === props.currentPlayerId
 })
 
