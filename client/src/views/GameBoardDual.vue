@@ -343,7 +343,7 @@ function onTrayAction(cardId: string, action: 'top' | 'bottom' | 'hand' | 'revea
     case 'reveal':
       deckVision.broadcastReveal([cardId])
       store.writeLog(`${who} a montré une carte à l'adversaire`, uid)
-      break
+      return // card stays in tray after reveal
     case 'discard':
       store.applyAction({ type: 'DISCARD_CARD', playerId: uid, cardId, fromZoneId: 'main_deck' })
       break
