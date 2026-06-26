@@ -41,8 +41,8 @@ const emit = defineEmits<{ quit: [] }>()
             La partie est en pause. En attente de reconnexion.
           </p>
 
-          <button v-if="status === 'gone'" class="presence-quit-btn" @click="emit('quit')">
-            Quitter la partie
+          <button class="presence-quit-btn" @click="emit('quit')">
+            Terminer et quitter la partie
           </button>
         </div>
       </div>

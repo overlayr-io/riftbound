@@ -121,7 +121,7 @@ const playerChoices = computed(() => {
   return game.playerIds.map((uid) => {
     const legendName = game.currentRound?.players[uid]?.legendCard?.name
     if (uid === game.myUid) return { uid, label: 'Moi' }
-    return { uid, label: legendName ? `Adversaire — ${legendName}` : playerName(uid) }
+    return { uid, label: legendName ? `Adversaire` : playerName(uid) }
   })
 })
 

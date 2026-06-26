@@ -28,14 +28,15 @@ const activeTab = ref<TabId>('matchmaking')
 // ── Game mode options ──────────────────────────────────────────────────────
 const MODES: { value: GameMode; label: string; desc: string; soon: boolean }[] = [
   { value: 'dual', label: 'Duel', desc: '1 contre 1', soon: false },
-  { value: '2v2', label: '2V2', desc: 'Équipes de 2', soon: false },
+  { value: '2v2', label: '2V2', desc: 'Équipes de 2', soon: true },
   { value: 'FFA', label: 'FFA', desc: 'Chacun pour soi', soon: true },
 ]
 
 // ── Match format options ───────────────────────────────────────────────────
 const MATCH_FORMATS: { value: GameMatchFormat; label: string; desc: string; soon: boolean }[] = [
   { value: 'BO1', label: 'BO1', desc: 'Manche unique', soon: false },
-  { value: 'BO3', label: 'BO3', desc: 'Meilleur des 3', soon: true },
+  { value: 'BO3', label: 'BO3', desc: 'Meilleur des 3', soon: false },
+  { value: 'BO5', label: 'BO5', desc: 'Meilleur des 5', soon: true },
 ]
 const matchFormat = 'BO1' as GameMatchFormat
 

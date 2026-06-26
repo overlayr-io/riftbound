@@ -5,7 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 const auth = useAuthStore()
 
 const playerName = computed(() =>
-  auth.user ? auth.user.uid.slice(0, 8).toUpperCase() : '--------'
+  auth.user ? auth.user?.displayName : '--------'
 )
 
 const statusColor = computed(() => (auth.initialized ? '#00CCB9' : '#C8AA6E'))

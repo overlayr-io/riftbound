@@ -20,11 +20,11 @@ interface TokenDef {
 const TOKENS: TokenDef[] = [
   { id: 'bird',        label: 'Oiseau',      imageUrl: birdImg,        cardType: 'unit' },
   { id: 'buff',        label: 'Buff',        imageUrl: buffImg,        cardType: 'spell' },
-  { id: 'gold_gear',  label: 'Engrenage',   imageUrl: goldGearImg,    cardType: 'gear' },
+  { id: 'gold_gear',  label: 'Gold',   imageUrl: goldGearImg,    cardType: 'gear' },
   { id: 'mech',       label: 'Mech',        imageUrl: mechImg,        cardType: 'unit' },
   { id: 'recruit',    label: 'Recrue',      imageUrl: recruitImg,     cardType: 'unit' },
-  { id: 'sand_solder',label: 'Soudeur',     imageUrl: sandSolderImg,  cardType: 'unit' },
-  { id: 'sprite',     label: 'Esprit',      imageUrl: spriteImg,      cardType: 'unit' },
+  { id: 'sand_solder',label: 'Soldat',     imageUrl: sandSolderImg,  cardType: 'unit' },
+  { id: 'sprite',     label: 'Sprit',      imageUrl: spriteImg,      cardType: 'unit' },
 ]
 
 const props = defineProps<{

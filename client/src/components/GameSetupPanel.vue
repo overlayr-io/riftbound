@@ -205,7 +205,7 @@ function usedBfRound(bfId: string): number | null {
       </div>
 
       <div class="panel__footer">
-        <div class="footer-hint">Format texte — sections séparées par une ligne vide</div>
+        <div class="footer-hint">Format texte exporté depuis Piltover Archive</div>
         <div>
           <ActionButton
               :variant="importing ? 'locked' : 'primary'"
@@ -310,7 +310,7 @@ function usedBfRound(bfId: string): number | null {
         <span class="panel__eyebrow">PRÉPARATION</span>
         <h1 class="panel__title">CHAMP DE BATAILLE</h1>
         <TitleOrnament />
-        <p class="panel__sub">Choisis ton champ de bataille — secret jusqu'à la révélation</p>
+        <p class="panel__sub">Choisis ton champ de bataille</p>
       </div>
 
       <div v-if="!selectedBFId" class="bf-grid">
@@ -352,7 +352,7 @@ function usedBfRound(bfId: string): number | null {
       </div>
 
       <div class="panel__footer">
-        <div class="footer-hint">Visible uniquement par vous — révélé quand tous ont choisi</div>
+        <div class="footer-hint">Visible uniquement par vous.</div>
         <div>
           <ActionButton
               v-if="!selectedBFId"
