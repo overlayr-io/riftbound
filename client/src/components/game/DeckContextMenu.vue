@@ -62,9 +62,6 @@ async function openFlyout(e: MouseEvent, action: 'vision' | 'reveal' | 'draw') {
   e.preventDefault()
   e.stopPropagation()
   if (activeFlyout.value === action) { activeFlyout.value = null; return }
-  activeFlyout.value = null
-  flyoutStyle.value = {}
-  await nextTick()
   activeFlyout.value = action
   await nextTick()
 

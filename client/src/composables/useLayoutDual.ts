@@ -248,12 +248,7 @@ export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
       }
     }
 
-    const BARON_INACTIVE_ZONES = new Set(['main_deck', 'hand', 'runes_deck'])
-    const hasBaronNashor = toValue(cards).some(c =>
-      c.description.name === 'Baron Nashor' &&
-      !BARON_INACTIVE_ZONES.has(c.zoneId)
-    )
-    const bfCount = hasBaronNashor ? 3 : 2
+    const bfCount = 2
     const bfW = (W.value - OUTSIDE_MARGIN - LEFT_X - bfCount * GAP - STACK.w) / bfCount
 
     const zoneRowFill = W.value - OUTSIDE_MARGIN - LEFT_X - 2 * cardSlot.w - 3 * GAP
@@ -285,12 +280,8 @@ export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
     emitPlayerRows(opponent,     top, v => v)
     emitPlayerRows(local ?? '', top, mirror)
 
-    emitBF(local ?? '', opponent,    LEFT_X,                                           bfW, true)
-    emitBF(opponent,    local ?? '', LEFT_X + (hasBaronNashor ? 2 : 1) * (bfW + GAP), bfW, false)
-
-    if (hasBaronNashor) {
-      emitBF('baron_nashor', local ?? '', LEFT_X + bfW + GAP, bfW, true)
-    }
+    emitBF(local ?? '', opponent,    LEFT_X,                  bfW, true)
+    emitBF(opponent,    local ?? '', LEFT_X + bfW + GAP,     bfW, false)
 
     result['stack'] = { x: W.value - OUTSIDE_MARGIN - STACK.w, y: ybf, w: STACK.w, h: bfH }
 

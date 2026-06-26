@@ -9,7 +9,6 @@ import TokenCreationPanel from '@/components/game/TokenCreationPanel.vue'
 import DeckContextMenu from '@/components/game/DeckContextMenu.vue'
 import HandContextMenu from '@/components/game/HandContextMenu.vue'
 import VisionTray from '@/components/game/VisionTray.vue'
-import baronPitImg from '@/assets/img/baron_pit.webp'
 import ZoneTray from '@/components/game/ZoneTray.vue'
 import type { ZoneTrayAction } from '@/components/game/ZoneTray.vue'
 import RevealBanner from '@/components/game/RevealBanner.vue'
@@ -346,7 +345,7 @@ function onTrayAction(cardId: string, action: 'top' | 'bottom' | 'hand' | 'revea
     case 'reveal':
       deckVision.broadcastReveal([cardId])
       store.writeLog(`${who} a montré une carte à l'adversaire`, uid)
-      return // card stays in tray after reveal
+      break
     case 'discard':
       store.applyAction({ type: 'DISCARD_CARD', playerId: uid, cardId, fromZoneId: 'main_deck' })
       break
@@ -657,48 +656,6 @@ function onCloseShowdown(sd: ShowdownData) {
   store.clearShowdown(sd.bfOwnerId)
 }
 
-function createShowdownManual() {
-  const myId = store.myUid
-  const oppId = store.opponents[0]
-  if (!myId || !oppId) return
-  if (store.currentRound?.showdowns?.[myId]) return
-  store.writeLog(`${store.actorName(myId)} démarre un showdown`, myId)
-  store.setShowdown(myId, {
-    bfOwnerId: myId,
-    attackerId: oppId,
-    currentTurnId: oppId,
-    passCount: 0,
-    ended: false,
-    startedAt: Date.now(),
-  })
-}
-
-function canCreateShowdown(key: string): boolean {
-  const { owner, zone } = parseZoneKey(key)
-  if (zone !== 'battlefield_owner') return false
-  if (!owner || owner !== store.myUid) return false
-  return !store.currentRound?.showdowns?.[owner]
-}
-
-// ── Baron Pit ─────────────────────────────────────────────────────────────────
-
-function onAddBaronPit() {
-  const myId = store.myUid
-  const oppId = store.opponents[0]
-  if (!myId || !oppId) return
-  store.writeLog(`${store.actorName(myId)} invoque le Baron Pit`, myId)
-  if (!store.currentRound?.showdowns?.['baron_nashor']) {
-    store.setShowdown('baron_nashor', {
-      bfOwnerId: 'baron_nashor',
-      attackerId: myId,
-      currentTurnId: myId,
-      passCount: 0,
-      ended: false,
-      startedAt: Date.now(),
-    })
-  }
-}
-
 // ── Discard tray ──────────────────────────────────────────────────────────────
 
 const discardTrayOpen = ref(false)
@@ -963,20 +920,6 @@ function bleedRect(rect: Rect): Rect {
             @click="banishTrayOpen = true"
           />
 
-          <!-- Showdown creation button for battlefield_owner (positioned like ShowdownPanel) -->
-          <div
-            v-if="canCreateShowdown(String(key)) && rect.w > 0"
-            style="position: fixed; pointer-events: none;"
-            :style="{ left: (rect.x + rect.w * 0.62 + 16) + 'px', top: (rect.y + rect.h / 2) + 'px' }"
-          >
-            <button
-              class="showdown-create-btn"
-              style="pointer-events: auto"
-              title="Démarrer un showdown"
-              @click="createShowdownManual()"
-            >⚔ Showdown</button>
-          </div>
-
           <!-- Anti-cheat halo: opponent is looking at the top of their deck -->
           <div
             v-if="visionOnZone(String(key)) && rect.w > 0"
@@ -1020,7 +963,6 @@ function bleedRect(rect: Rect): Rect {
             :card="card"
             :layout="layouts.get(card.cardId)!"
             :current-player-id="store.myUid ?? ''"
-            @add-baron-pit="onAddBaronPit"
           />
         </template>
       </div>
@@ -1126,19 +1068,6 @@ function bleedRect(rect: Rect): Rect {
         @conquer="onConquer(panel.sd)"
         @close="onCloseShowdown(panel.sd)"
       />
-
-      <!-- Baron Pit image overlay (auto-shown when Baron Nashor is in play via layout) -->
-      <template v-if="zones['baron_nashor:battlefield']">
-        <div
-          class="baron-pit-bg"
-          :style="{
-            left: zones['baron_nashor:battlefield'].x + 'px',
-            top: zones['baron_nashor:battlefield'].y + 'px',
-            width: zones['baron_nashor:battlefield'].w + 'px',
-            height: zones['baron_nashor:battlefield'].h + 'px',
-          }"
-        />
-      </template>
 
       <!-- Discard tray -->
       <ZoneTray
@@ -1329,41 +1258,6 @@ function bleedRect(rect: Rect): Rect {
   background: rgba(200, 170, 110, 0.3);
   border-color: #C8AA6E;
   box-shadow: 0 0 8px rgba(200, 170, 110, 0.4);
-}
-
-.baron-pit-bg {
-  position: fixed;
-  z-index: 1;
-  pointer-events: none;
-  background-image: v-bind('`url(${baronPitImg})`');
-  background-size: cover;
-  background-position: center;
-  opacity: 0.55;
-  border-radius: 4px;
-}
-
-.showdown-create-btn {
-  position: absolute;
-  top: 0;
-  left: 0;
-  transform: translateY(-50%);
-  padding: 4px 10px;
-  border-radius: 5px;
-  background: rgba(239, 83, 80, 0.15);
-  border: 1px solid rgba(239, 83, 80, 0.5);
-  color: #ef9a9a;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  cursor: pointer;
-  opacity: 0.8;
-  transition: opacity 0.15s, background 0.15s, border-color 0.15s;
-}
-.showdown-create-btn:hover {
-  opacity: 1;
-  background: rgba(239, 83, 80, 0.28);
-  border-color: #ef5350;
 }
 
 /* SVG arrows overlay */

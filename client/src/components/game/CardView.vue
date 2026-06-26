@@ -20,8 +20,6 @@ const props = defineProps<{
   currentPlayerId: string
 }>()
 
-const emit = defineEmits<{ addBaronPit: [] }>()
-
 const drag = inject(DRAG_KEY)
 const actions = inject(GAME_ACTIONS_KEY)
 const pingArrow = inject<PingArrowContext>(PING_ARROW_KEY)
@@ -49,14 +47,10 @@ const isArrowSource = computed(() =>
 )
 const isArrowMode = computed(() => pingArrow?.isArrowMode.value ?? false)
 
-const OWNER_ONLY_ZONES = new Set(['discard', 'banish'])
-
 const canSeeFront = computed(() => {
   const v = props.card.state.visibleTo
-  if (v === 'NOBODY') return false
-  // Discard and banish are face-down to the opponent regardless of visibleTo
-  if (OWNER_ONLY_ZONES.has(props.card.zoneId) && props.card.controllerId !== props.currentPlayerId) return false
   if (v === 'ALL') return true
+  if (v === 'NOBODY') return false
   return props.card.controllerId === props.currentPlayerId
 })
 
@@ -269,7 +263,7 @@ function onContextMenu(e: MouseEvent) {
     @pointercancel="onPointerUp"
     @click="onClick"
     @contextmenu="onContextMenu"
-    @pointerenter="(e) => { isHovered = true; if (!isPointerDown.value && canSeeFront && card.description.imageUrl) showZoom(card.description.imageUrl, e.currentTarget as Element) }"
+    @pointerenter="(e) => { isHovered = true; if (!isPointerDown && canSeeFront && card.description.imageUrl) showZoom(card.description.imageUrl, e.currentTarget as Element) }"
     @pointerleave="() => { isHovered = false; hideZoom() }"
   >
     <div class="card-inner" :style="innerStyle">
@@ -355,7 +349,6 @@ function onContextMenu(e: MouseEvent) {
     :y="ctxY"
     :current-player-id="currentPlayerId"
     @close="ctxVisible = false"
-    @add-baron-pit="emit('addBaronPit')"
   />
 
   <OpponentCardContextMenu

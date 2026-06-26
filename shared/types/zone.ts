@@ -15,4 +15,6 @@ export type ZoneId =
   | 'battlefield_owner'
   | 'battlefield_opponent'
   | 'baron_nashor'
+  | 'baron_nashor_owner'
+  | 'baron_nashor_opponent'
   | 'stack'
