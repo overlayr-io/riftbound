@@ -15,4 +15,8 @@ export const userApi = {
   getMe(): Promise<UserDto> {
     return apiFetch('GET', '/users/me')
   },
+
+  updateMe(data: { displayName: string }): Promise<UserDto> {
+    return apiFetch('PATCH', '/users/me', data)
+  },
 }

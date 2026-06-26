@@ -1,10 +1,39 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { cardZoomScale } from '@/stores/settings'
+import { useAuthStore } from '@/stores/auth'
+import { userApi } from '@/services/userApi'
 
 const router = useRouter()
+const auth = useAuthStore()
 const version = __APP_VERSION__
+
+const displayName = ref(auth.user?.displayName ?? '')
+const nameLoading = ref(false)
+const nameError = ref<string | null>(null)
+const nameSaved = ref(false)
+
+const hasAccount = computed(() => !!auth.user && !auth.user.isAnonymous)
+
+async function saveName() {
+  if (!displayName.value.trim()) return
+  nameLoading.value = true; nameError.value = null; nameSaved.value = false
+  try {
+    await userApi.updateMe({ displayName: displayName.value.trim() })
+    nameSaved.value = true
+    setTimeout(() => { nameSaved.value = false }, 2000)
+  } catch {
+    nameError.value = 'Impossible de mettre à jour le nom.'
+  } finally {
+    nameLoading.value = false
+  }
+}
+
+async function signOut() {
+  await auth.signOut()
+  router.replace('/welcome')
+}
 
 const BASE_W = 210
 const BASE_H = 294
@@ -33,6 +62,39 @@ const scaleLabel = computed(() => `${Math.round(cardZoomScale.value * 100)}%`)
 
     <!-- Body -->
     <div class="settings-body">
+
+      <!-- ── Compte ── -->
+      <section v-if="hasAccount" class="section">
+        <div class="section-header">
+          <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+          COMPTE
+        </div>
+        <div class="section-body">
+          <div class="field">
+            <label class="field-label">NOM AFFICHÉ</label>
+            <div class="name-row">
+              <input
+                v-model="displayName"
+                class="name-input"
+                maxlength="32"
+                placeholder="Ton nom en jeu"
+                @keydown.enter="saveName"
+              />
+              <button class="save-btn" :disabled="nameLoading || !displayName.trim()" @click="saveName">
+                {{ nameLoading ? '…' : nameSaved ? '✓' : 'Sauvegarder' }}
+              </button>
+            </div>
+            <p v-if="nameError" class="field-err">{{ nameError }}</p>
+          </div>
+
+          <div class="field">
+            <label class="field-label">SESSION</label>
+            <button class="signout-btn" @click="signOut">Se déconnecter</button>
+          </div>
+        </div>
+      </section>
 
       <!-- ── Affichage ── -->
       <section class="section">
@@ -354,6 +416,30 @@ kbd {
   font-family: inherit;
   min-width: 1.5rem; text-align: center;
 }
+
+/* Account */
+.name-row { display: flex; gap: 0.5rem; }
+.name-input {
+  flex: 1; background: #070b12; border: 1px solid #2a3445; border-radius: 6px;
+  padding: 0.5rem 0.75rem; color: #fff; font-size: 0.85rem;
+}
+.name-input:focus { outline: none; border-color: #C8AA6E; }
+.save-btn {
+  background: linear-gradient(180deg, #f2e5cd, #c8aa6e 52%, #a3751e);
+  color: #1a130a; font-weight: 700; font-size: 0.75rem; letter-spacing: 0.05em;
+  border: none; border-radius: 6px; padding: 0.5rem 1rem; cursor: pointer;
+  white-space: nowrap; transition: opacity 0.15s;
+}
+.save-btn:disabled { opacity: 0.4; cursor: default; }
+.field-err { font-size: 0.72rem; color: #ff6b6b; }
+.signout-btn {
+  align-self: flex-start;
+  background: transparent; border: 1px solid rgba(255,90,90,0.35);
+  color: #ff6b6b; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em;
+  padding: 0.45rem 1rem; border-radius: 6px; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.signout-btn:hover { background: rgba(255,90,90,0.1); border-color: #ff6b6b; }
 
 /* Footer */
 .settings-footer {

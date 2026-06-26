@@ -12,4 +12,10 @@ export class UserService {
   async getById(uid: string): Promise<User | null> {
     return this.userRepo.findById(uid)
   }
+
+  async updateDisplayName(uid: string, displayName: string): Promise<User> {
+    await this.userRepo.setDisplayName(uid, displayName)
+    const user = await this.userRepo.findById(uid)
+    return user!
+  }
 }

@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express'
 import { UserService } from '../services/user.service'
 import { UserRepository } from '../repositories/user.repository'
+import { firebaseAuth } from '../config/firebase'
 
 const userService = new UserService(new UserRepository())
 
@@ -26,6 +27,20 @@ export async function getMe(req: Request, res: Response, next: NextFunction) {
   try {
     const user = await userService.getById(req.user!.uid)
     if (!user) { res.status(404).json({ error: 'User not found' }); return }
+    res.status(200).json(user)
+  } catch (err) { next(err) }
+}
+
+export async function updateMe(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { displayName } = req.body as { displayName?: unknown }
+    if (typeof displayName !== 'string' || !displayName.trim()) {
+      res.status(400).json({ error: 'displayName requis' }); return
+    }
+    const trimmed = displayName.trim().slice(0, 32)
+    const uid = req.user!.uid
+    await firebaseAuth.updateUser(uid, { displayName: trimmed })
+    const user = await userService.updateDisplayName(uid, trimmed)
     res.status(200).json(user)
   } catch (err) { next(err) }
 }

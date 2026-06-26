@@ -66,9 +66,11 @@ export class UserRepository {
         deletedAt: null,
       })
     } else {
+      const existing = snap.data()!
       await ref.update({
         email: input.email,
-        displayName: input.displayName,
+        // Preserve a display name the user set manually; only sync from token if none stored yet.
+        displayName: existing.displayName ?? input.displayName,
         isAnonymous: input.isAnonymous,
         lastSeenAt: now,
       })
