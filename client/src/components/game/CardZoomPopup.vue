@@ -10,6 +10,7 @@ defineProps<{ zoom: ZoomState | null }>()
       <div
         v-if="zoom"
         class="card-zoom-popup"
+        :class="{'card-zoom-popup-battlefield': zoom.cardType === 'battlefield'}"
         :style="{ left: zoom.x + 'px', top: zoom.y + 'px', width: zoom.w + 'px', height: zoom.h + 'px' }"
       >
         <img :src="zoom.imageUrl" alt="" class="card-zoom-popup__img" />
@@ -26,6 +27,9 @@ defineProps<{ zoom: ZoomState | null }>()
   border-radius: 6px;
   overflow: hidden;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(200, 170, 110, 0.2);
+}
+.card-zoom-popup-battlefield {
+  box-shadow: none !important;
 }
 
 .card-zoom-popup__img {

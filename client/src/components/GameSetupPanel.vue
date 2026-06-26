@@ -242,7 +242,7 @@ function usedBfRound(bfId: string): number | null {
               :key="card.baseCardId"
               class="sb-row sb-row--main"
               @click="moveToSideboard(card.baseCardId)"
-              @mouseenter="card.imageUrl && showZoom(card.imageUrl, $event.currentTarget as Element)"
+              @mouseenter="card.imageUrl && showZoom(card.imageUrl, $event.currentTarget as Element, card.type)"
               @mouseleave="hideZoom"
             >
               <span class="sb-row__arrow">→</span>
@@ -266,7 +266,7 @@ function usedBfRound(bfId: string): number | null {
               :key="card.baseCardId"
               class="sb-row sb-row--side"
               @click="moveToMain(card.baseCardId)"
-              @mouseenter="card.imageUrl && showZoom(card.imageUrl, $event.currentTarget as Element)"
+              @mouseenter="card.imageUrl && showZoom(card.imageUrl, $event.currentTarget as Element, card.type)"
               @mouseleave="hideZoom"
             >
               <span class="sb-row__arrow">←</span>
@@ -324,7 +324,7 @@ function usedBfRound(bfId: string): number | null {
           }"
           :disabled="usedBfRound(bf.id) !== null"
           @click="usedBfRound(bf.id) === null && (selectedBFId = bf.id, emit('selectBattlefield', bf))"
-          @mouseenter="bf.imageUrl && showZoom(bf.imageUrl, $event.currentTarget as Element)"
+          @mouseenter="bf.imageUrl && showZoom(bf.imageUrl, $event.currentTarget as Element, card.type)"
           @mouseleave="hideZoom"
         >
           <div class="bf-card__img">
@@ -555,7 +555,7 @@ function usedBfRound(bfId: string): number | null {
           }"
           :disabled="myMulliganDone"
           @click="toggleMulliganCard(card.id)"
-          @mouseenter="card.imageUrl && showZoom(card.imageUrl, $event.currentTarget as Element)"
+          @mouseenter="card.imageUrl && showZoom(card.imageUrl, $event.currentTarget as Element, card.type)"
           @mouseleave="hideZoom"
         >
           <img

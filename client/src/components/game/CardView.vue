@@ -264,7 +264,7 @@ function onContextMenu(e: MouseEvent) {
     @pointercancel="onPointerUp"
     @click="onClick"
     @contextmenu="onContextMenu"
-    @pointerenter="(e) => { isHovered = true; if (!isPointerDown && canSeeFront && card.description.imageUrl) showZoom(card.description.imageUrl, e.currentTarget as Element) }"
+    @pointerenter="(e) => { isHovered = true; if (!isPointerDown && canSeeFront && card.description.imageUrl) showZoom(card.description.imageUrl, e.currentTarget as Element, card.description.type) }"
     @pointerleave="() => { isHovered = false; hideZoom() }"
   >
     <div class="card-inner" :style="innerStyle">

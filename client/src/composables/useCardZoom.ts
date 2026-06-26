@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import type { CardType } from '@riftbound/shared'
 import { cardZoomScale } from '@/stores/settings'
 
 const BASE_W = 210
@@ -7,6 +8,7 @@ const GAP = 10
 
 export interface ZoomState {
   imageUrl: string
+  cardType: CardType
   x: number
   y: number
   w: number
@@ -16,7 +18,7 @@ export interface ZoomState {
 export function useCardZoom() {
   const zoom = ref<ZoomState | null>(null)
 
-  function showZoom(imageUrl: string, el: Element) {
+  function showZoom(imageUrl: string, el: Element, cardType: CardType = 'unit') {
     const scale = cardZoomScale.value
     const w = Math.round(BASE_W * scale)
     const h = Math.round(BASE_H * scale)
@@ -34,7 +36,7 @@ export function useCardZoom() {
     if (y + h > vh - 8) y = vh - h - 8
     if (y < 8) y = 8
 
-    zoom.value = { imageUrl, x, y, w, h }
+    zoom.value = { imageUrl, cardType, x, y, w, h }
   }
 
   function hideZoom() {
