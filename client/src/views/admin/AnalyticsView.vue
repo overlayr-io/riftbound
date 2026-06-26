@@ -1,14 +1,20 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
-import type { MetricPoint } from '@riftbound/shared'
+import type { MetricPoint, QuotaGauge } from '@riftbound/shared'
 import { useAdminAnalyticsStore } from '@/stores/adminAnalytics'
 import { adminAnalyticsApi } from '@/services/adminAnalyticsApi'
 
 const store = useAdminAnalyticsStore()
-const { dashboard, health, loading, error } = storeToRefs(store)
+const { dashboard, health, quota, loading, quotaLoading, error, quotaError } = storeToRefs(store)
 
-onMounted(() => store.load(14))
+onMounted(() => { store.load(14); store.loadQuota() })
+
+function gaugeColor(pct: number): string {
+  if (pct >= 90) return 'var(--adm-danger)'
+  if (pct >= 70) return '#f59e0b'
+  return 'var(--adm-teal)'
+}
 
 function max(points: MetricPoint[]): number {
   return Math.max(1, ...points.map((p) => p.value))
@@ -126,6 +132,101 @@ const modeTotal = computed(() => dashboard.value?.modeBreakdown.reduce((s, m) =>
         <p v-else class="muted">Pas encore de cohortes.</p>
       </div>
 
+      <!-- Quotas Firebase -->
+      <div class="adm-card block quota-section">
+        <div class="quota-head">
+          <div class="section-title" style="margin-bottom:0">Quotas Firebase <span class="muted">· plan Spark (gratuit)</span></div>
+          <button class="adm-btn adm-btn--ghost adm-btn--sm" :disabled="quotaLoading" @click="store.loadQuota()">
+            <span v-if="quotaLoading">…</span><span v-else>↻ Actualiser</span>
+          </button>
+        </div>
+
+        <div v-if="quotaError" class="adm-state adm-state--error" style="margin-top:.75rem">{{ quotaError }}</div>
+
+        <template v-if="quota">
+          <div class="quota-source">
+            <span class="adm-chip" :class="quota.source === 'cloud-monitoring' ? 'adm-chip--ok' : 'adm-chip--warn'">
+              {{ quota.source === 'cloud-monitoring' ? 'Cloud Monitoring' : 'Estimé' }}
+            </span>
+            <span class="muted">· généré {{ new Date(quota.generatedAt).toLocaleTimeString('fr-FR') }}</span>
+          </div>
+
+          <div class="quota-grid">
+            <!-- Firestore -->
+            <div class="quota-group">
+              <div class="quota-group-title">Firestore</div>
+              <div class="quota-row" v-for="g in [quota.firestore.readsToday, quota.firestore.writesToday, quota.firestore.deletesToday]" :key="g.label">
+                <div class="quota-row-head">
+                  <span class="quota-label">{{ g.label }}</span>
+                  <span class="quota-nums">{{ g.used.toLocaleString('fr-FR') }} / {{ g.limit.toLocaleString('fr-FR') }} {{ g.unit }} <b :style="{ color: gaugeColor(g.pct) }">{{ g.pct }}%</b></span>
+                </div>
+                <div class="quota-track">
+                  <div class="quota-fill" :style="{ width: g.pct + '%', background: gaugeColor(g.pct) }" />
+                </div>
+              </div>
+              <div class="quota-row">
+                <div class="quota-row-head">
+                  <span class="quota-label">{{ quota.firestore.storageBytes.label }}</span>
+                  <span class="quota-nums">{{ quota.firestore.storageBytes.unit }} / 1 GiB <b :style="{ color: gaugeColor(quota.firestore.storageBytes.pct) }">{{ quota.firestore.storageBytes.pct }}%</b></span>
+                </div>
+                <div class="quota-track">
+                  <div class="quota-fill" :style="{ width: quota.firestore.storageBytes.pct + '%', background: gaugeColor(quota.firestore.storageBytes.pct) }" />
+                </div>
+              </div>
+              <div class="quota-doc-count">{{ quota.firestore.documentCount.toLocaleString('fr-FR') }} documents au total</div>
+            </div>
+
+            <!-- RTDB -->
+            <div class="quota-group">
+              <div class="quota-group-title">Realtime Database</div>
+              <div class="quota-row" v-for="g in [quota.rtdb.storageBytes, quota.rtdb.downloadThisMonth]" :key="g.label">
+                <div class="quota-row-head">
+                  <span class="quota-label">{{ g.label }}</span>
+                  <span class="quota-nums">{{ g.unit }} / {{ g === quota.rtdb.storageBytes ? '1 GiB' : '10 GiB' }} <b :style="{ color: gaugeColor(g.pct) }">{{ g.pct }}%</b></span>
+                </div>
+                <div class="quota-track">
+                  <div class="quota-fill" :style="{ width: g.pct + '%', background: gaugeColor(g.pct) }" />
+                </div>
+              </div>
+              <p v-if="!quota.rtdb.connections" class="muted" style="font-size:.76rem;margin-top:.4rem">Connexions simultanées : non instrumenté</p>
+            </div>
+          </div>
+
+          <!-- Estimation parties restantes -->
+          <div class="quota-games">
+            <div class="quota-group-title" style="margin-bottom:.75rem">Parties restantes estimées aujourd'hui</div>
+            <div class="quota-games-grid">
+              <div class="adm-card quota-game-card">
+                <div class="qg-num" :style="{ color: quota.games.gamesRemainingMin !== null && quota.games.gamesRemainingMin < 50 ? 'var(--adm-danger)' : 'var(--adm-text)' }">
+                  {{ quota.games.gamesRemainingMin !== null ? quota.games.gamesRemainingMin.toLocaleString('fr-FR') : '—' }}
+                </div>
+                <div class="qg-label">parties restantes <span class="muted">(contrainte principale)</span></div>
+              </div>
+              <div class="adm-card quota-game-card">
+                <div class="qg-num">{{ quota.games.gamesRemainingByReads !== null ? quota.games.gamesRemainingByReads.toLocaleString('fr-FR') : '—' }}</div>
+                <div class="qg-label">limitées par les lectures</div>
+              </div>
+              <div class="adm-card quota-game-card">
+                <div class="qg-num">{{ quota.games.gamesRemainingByWrites !== null ? quota.games.gamesRemainingByWrites.toLocaleString('fr-FR') : '—' }}</div>
+                <div class="qg-label">limitées par les écritures</div>
+              </div>
+            </div>
+
+            <div class="quota-avg" v-if="quota.games.avgReadsPerGame !== null || quota.games.avgWritesPerGame !== null">
+              <span class="muted">Moyenne par partie aujourd'hui</span>
+              <span v-if="quota.games.avgReadsPerGame !== null">· <b>{{ quota.games.avgReadsPerGame.toLocaleString('fr-FR') }}</b> lectures</span>
+              <span v-if="quota.games.avgWritesPerGame !== null">· <b>{{ quota.games.avgWritesPerGame.toLocaleString('fr-FR') }}</b> écritures</span>
+              <span class="muted">· basé sur {{ quota.games.totalGamesToday }} partie(s) aujourd'hui</span>
+            </div>
+            <p v-else class="muted" style="font-size:.76rem;margin-top:.5rem">
+              Moyenne indisponible — nécessite Cloud Monitoring API + au moins 1 partie aujourd'hui.
+            </p>
+          </div>
+        </template>
+
+        <div v-else-if="quotaLoading" class="adm-state"><div class="adm-spinner" /> Chargement des quotas…</div>
+      </div>
+
       <!-- Santé système -->
       <div v-if="health" class="adm-card block">
         <div class="section-title">Santé système</div>
@@ -176,4 +277,35 @@ const modeTotal = computed(() => dashboard.value?.modeBreakdown.reduce((s, m) =>
 .h b.bad { color: var(--adm-danger); }
 .h .muted { font-size: 0.76rem; }
 @media (max-width: 1000px) { .grid2 { grid-template-columns: 1fr; } }
+
+/* ── Quotas Firebase ─────────────────────────────────────────────────────── */
+.quota-section { padding: 1.35rem 1.5rem; margin-bottom: 1.25rem; }
+.quota-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.adm-btn--sm { padding: 0.3rem 0.75rem; font-size: 0.75rem; }
+.quota-source { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.1rem; font-size: 0.8rem; }
+.adm-chip--warn { background: rgba(245,158,11,.15); color: #f59e0b; border: 1px solid rgba(245,158,11,.3); }
+
+.quota-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+@media (max-width: 900px) { .quota-grid { grid-template-columns: 1fr; } }
+
+.quota-group { display: flex; flex-direction: column; gap: 0.75rem; }
+.quota-group-title { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--adm-text-dim); }
+
+.quota-row { display: flex; flex-direction: column; gap: 0.3rem; }
+.quota-row-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.82rem; }
+.quota-label { color: var(--adm-text-dim); }
+.quota-nums { color: var(--adm-text-faint); font-size: 0.78rem; }
+.quota-nums b { font-weight: 700; }
+.quota-track { height: 8px; background: var(--adm-raise); border-radius: 4px; overflow: hidden; }
+.quota-fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
+.quota-doc-count { font-size: 0.76rem; color: var(--adm-text-faint); margin-top: 0.25rem; }
+
+.quota-games { border-top: 1px solid var(--adm-border); padding-top: 1.25rem; }
+.quota-games-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.85rem; margin-bottom: 1rem; }
+@media (max-width: 700px) { .quota-games-grid { grid-template-columns: 1fr; } }
+.quota-game-card { padding: 1rem 1.1rem; }
+.qg-num { font-size: 1.6rem; font-weight: 800; line-height: 1; }
+.qg-label { font-size: 0.73rem; color: var(--adm-text-dim); margin-top: 0.4rem; }
+.quota-avg { font-size: 0.8rem; color: var(--adm-text-dim); display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+.quota-avg b { color: var(--adm-text); }
 </style>

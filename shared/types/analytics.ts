@@ -71,3 +71,48 @@ export interface RevenueMetrics {
   arpu: number | null
   payingUsers: number | null
 }
+
+/** Une jauge de quota (valeur actuelle vs limite). */
+export interface QuotaGauge {
+  used: number
+  limit: number
+  pct: number // 0-100
+  label: string
+  unit: string
+}
+
+export interface FirestoreQuota {
+  readsToday: QuotaGauge
+  writesToday: QuotaGauge
+  deletesToday: QuotaGauge
+  storageBytes: QuotaGauge
+  documentCount: number
+}
+
+export interface RtdbQuota {
+  storageBytes: QuotaGauge
+  downloadThisMonth: QuotaGauge
+  connections: QuotaGauge | null
+}
+
+export interface GamesQuotaEstimate {
+  totalGames: number
+  totalGamesToday: number
+  avgReadsPerGame: number | null
+  avgWritesPerGame: number | null
+  gamesRemainingByReads: number | null
+  gamesRemainingByWrites: number | null
+  /** Minimum des deux = contrainte la plus serrée */
+  gamesRemainingMin: number | null
+}
+
+export interface FirebaseQuotaMetrics {
+  /** 'spark' = gratuit (limites connues). 'blaze' = pay-as-you-go (pas de quota disjoncteur). */
+  plan: 'spark' | 'blaze'
+  generatedAt: string
+  /** 'cloud-monitoring' si les métriques viennent de l'API GCloud, sinon 'estimated'. */
+  source: 'cloud-monitoring' | 'estimated'
+  firestore: FirestoreQuota
+  rtdb: RtdbQuota
+  games: GamesQuotaEstimate
+}

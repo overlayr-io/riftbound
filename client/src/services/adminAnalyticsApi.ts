@@ -1,4 +1,4 @@
-import type { DashboardMetrics, SystemHealth, RevenueMetrics } from '@riftbound/shared'
+import type { DashboardMetrics, SystemHealth, RevenueMetrics, FirebaseQuotaMetrics } from '@riftbound/shared'
 import { apiFetch } from './http'
 import { auth } from '@/firebase'
 
@@ -13,6 +13,9 @@ export const adminAnalyticsApi = {
   },
   revenue(): Promise<RevenueMetrics> {
     return apiFetch('GET', '/admin/analytics/revenue')
+  },
+  quotas(): Promise<FirebaseQuotaMetrics> {
+    return apiFetch('GET', '/admin/analytics/quotas')
   },
   /** Télécharge l'export (json|csv) via un blob authentifié. */
   async download(format: 'json' | 'csv', days = 14): Promise<void> {

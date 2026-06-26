@@ -2,8 +2,10 @@ import type { Request, Response, NextFunction } from 'express'
 import type { DashboardMetrics } from '@riftbound/shared'
 import { AnalyticsService } from '../services/analytics.service'
 import { AnalyticsRepository } from '../repositories/analytics.repository'
+import { QuotaService } from '../services/quota.service'
 
 const service = new AnalyticsService(new AnalyticsRepository())
+const quotaService = new QuotaService()
 
 export async function getDashboard(req: Request, res: Response, next: NextFunction) {
   try {
@@ -18,6 +20,14 @@ export async function getHealth(_req: Request, res: Response, next: NextFunction
 
 export async function getRevenue(_req: Request, res: Response, next: NextFunction) {
   try { res.json(service.revenue()) } catch (err) { next(err) }
+}
+
+export async function getQuota(_req: Request, res: Response, next: NextFunction) {
+  try {
+    const [metrics] = await Promise.all([service.dashboard(1)])
+    const gamesCreatedToday = metrics.gamesCreatedPerDay.at(-1)?.value ?? 0
+    res.json(await quotaService.get(metrics.totals.games, gamesCreatedToday))
+  } catch (err) { next(err) }
 }
 
 function toCsv(m: DashboardMetrics): string {
