@@ -654,6 +654,29 @@ function onCloseShowdown(sd: ShowdownData) {
   store.clearShowdown(sd.bfOwnerId)
 }
 
+function createShowdownManual() {
+  const myId = store.myUid
+  const oppId = store.opponents[0]
+  if (!myId || !oppId) return
+  if (store.currentRound?.showdowns?.[myId]) return
+  store.writeLog(`${store.actorName(myId)} démarre un showdown`, myId)
+  store.setShowdown(myId, {
+    bfOwnerId: myId,
+    attackerId: oppId,
+    currentTurnId: oppId,
+    passCount: 0,
+    ended: false,
+    startedAt: Date.now(),
+  })
+}
+
+function canCreateShowdown(key: string): boolean {
+  const { owner, zone } = parseZoneKey(key)
+  if (zone !== 'battlefield_owner') return false
+  if (!owner || owner !== store.myUid) return false
+  return !store.currentRound?.showdowns?.[owner]
+}
+
 // ── Hand actions ───────────────────────────────────────────────────────────────
 
 const handMenuVisible = ref(false)
@@ -819,6 +842,21 @@ function bleedRect(rect: Rect): Rect {
               title="Créer un token (T)"
               @click="onTokenZonePlus(String(key), $event)"
             >+</button>
+          </div>
+
+          <!-- Showdown creation button for battlefield_owner -->
+          <div
+            v-if="canCreateShowdown(String(key)) && rect.w > 0"
+            class="zone-overlay"
+            style="pointer-events: none"
+            :style="{ left: rect.x + 'px', top: rect.y + 'px', width: rect.w + 'px', height: rect.h + 'px' }"
+          >
+            <button
+              class="showdown-create-btn"
+              style="pointer-events: auto"
+              title="Démarrer un showdown"
+              @click="createShowdownManual()"
+            >⚔ Showdown</button>
           </div>
 
           <!-- Anti-cheat halo: opponent is looking at the top of their deck -->
@@ -1139,6 +1177,30 @@ function bleedRect(rect: Rect): Rect {
   background: rgba(200, 170, 110, 0.3);
   border-color: #C8AA6E;
   box-shadow: 0 0 8px rgba(200, 170, 110, 0.4);
+}
+
+.showdown-create-btn {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 4px 10px;
+  border-radius: 5px;
+  background: rgba(239, 83, 80, 0.15);
+  border: 1px solid rgba(239, 83, 80, 0.5);
+  color: #ef9a9a;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity 0.15s, background 0.15s, border-color 0.15s;
+}
+.showdown-create-btn:hover {
+  opacity: 1;
+  background: rgba(239, 83, 80, 0.28);
+  border-color: #ef5350;
 }
 
 /* SVG arrows overlay */
