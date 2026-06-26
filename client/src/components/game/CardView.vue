@@ -20,6 +20,8 @@ const props = defineProps<{
   currentPlayerId: string
 }>()
 
+const emit = defineEmits<{ addBaronPit: [] }>()
+
 const drag = inject(DRAG_KEY)
 const actions = inject(GAME_ACTIONS_KEY)
 const pingArrow = inject<PingArrowContext>(PING_ARROW_KEY)
@@ -341,6 +343,7 @@ function onContextMenu(e: MouseEvent) {
     :y="ctxY"
     :current-player-id="currentPlayerId"
     @close="ctxVisible = false"
+    @add-baron-pit="emit('addBaronPit')"
   />
 
   <OpponentCardContextMenu

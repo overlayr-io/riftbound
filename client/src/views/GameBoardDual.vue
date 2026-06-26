@@ -679,6 +679,28 @@ function canCreateShowdown(key: string): boolean {
   return !store.currentRound?.showdowns?.[owner]
 }
 
+// ── Baron Pit ─────────────────────────────────────────────────────────────────
+
+const baronPitActive = ref(false)
+
+function onAddBaronPit() {
+  baronPitActive.value = true
+  const myId = store.myUid
+  const oppId = store.opponents[0]
+  if (!myId || !oppId) return
+  store.writeLog(`${store.actorName(myId)} invoque le Baron Pit`, myId)
+  if (!store.currentRound?.showdowns?.['baron_pit']) {
+    store.setShowdown('baron_pit', {
+      bfOwnerId: 'baron_pit',
+      attackerId: myId,
+      currentTurnId: myId,
+      passCount: 0,
+      ended: false,
+      startedAt: Date.now(),
+    })
+  }
+}
+
 // ── Discard tray ──────────────────────────────────────────────────────────────
 
 const discardTrayOpen = ref(false)
@@ -1001,6 +1023,7 @@ function bleedRect(rect: Rect): Rect {
             :card="card"
             :layout="layouts.get(card.cardId)!"
             :current-player-id="store.myUid ?? ''"
+            @add-baron-pit="onAddBaronPit"
           />
         </template>
       </div>
@@ -1106,6 +1129,28 @@ function bleedRect(rect: Rect): Rect {
         @conquer="onConquer(panel.sd)"
         @close="onCloseShowdown(panel.sd)"
       />
+
+      <!-- Baron Pit zone overlay (center of board) -->
+      <template v-if="baronPitActive">
+        <div
+          class="baron-pit-zone"
+          :style="{ left: (vw * 0.5 - 120) + 'px', top: (vh * 0.5 - 60) + 'px' }"
+        >
+          <div class="baron-pit-label">⚔ Baron Pit</div>
+          <button class="baron-pit-close" title="Fermer le Baron Pit" @click="baronPitActive = false; store.clearShowdown('baron_pit')">✕</button>
+        </div>
+        <ShowdownPanel
+          v-if="store.currentRound?.showdowns?.['baron_pit']"
+          :showdown="store.currentRound.showdowns['baron_pit']"
+          :my-id="store.myUid ?? ''"
+          :opponent-name="store.actorName(store.opponents[0] ?? '')"
+          :x="vw * 0.5 + 130"
+          :y="vh * 0.5"
+          @pass="onPass(store.currentRound.showdowns['baron_pit'])"
+          @conquer="onConquer(store.currentRound.showdowns['baron_pit'])"
+          @close="store.clearShowdown('baron_pit')"
+        />
+      </template>
 
       <!-- Discard tray -->
       <ZoneTray
@@ -1297,6 +1342,40 @@ function bleedRect(rect: Rect): Rect {
   border-color: #C8AA6E;
   box-shadow: 0 0 8px rgba(200, 170, 110, 0.4);
 }
+
+.baron-pit-zone {
+  position: fixed;
+  z-index: 4;
+  width: 240px;
+  height: 120px;
+  border: 2px solid rgba(200, 170, 110, 0.5);
+  background: rgba(10, 22, 40, 0.6);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.baron-pit-label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #C8AA6E;
+  text-shadow: 0 0 12px rgba(200, 170, 110, 0.4);
+}
+.baron-pit-close {
+  position: absolute;
+  top: 4px; right: 6px;
+  background: none;
+  border: none;
+  color: rgba(200, 170, 110, 0.4);
+  cursor: pointer;
+  font-size: 11px;
+  pointer-events: auto;
+  transition: color 0.1s;
+}
+.baron-pit-close:hover { color: #C8AA6E; }
 
 .showdown-create-btn {
   position: absolute;

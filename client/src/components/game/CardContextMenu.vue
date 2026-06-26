@@ -14,6 +14,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
+  addBaronPit: []
 }>()
 
 const gameStore = useGameStore()
@@ -307,6 +308,17 @@ function adjustCounter(field: 'counters' | 'damages' | 'buffs', delta: number) {
           <span class="ctx-label">Retirer du groupe</span>
         </div>
 
+        <!-- Baron Nashor: ajouter le Baron Pit -->
+        <template v-if="card?.description.name === 'Baron Nashor'">
+          <div class="ctx-sep" />
+          <div class="ctx-item ctx-item--baron" @click="emit('addBaronPit'); emit('close')">
+            <span class="ctx-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 20h20"/><path d="M5 20 L3 8 L8 13 L12 5 L16 13 L21 8 L19 20"/></svg>
+            </span>
+            <span class="ctx-label">Ajouter le Baron Pit</span>
+          </div>
+        </template>
+
       </div>
     </div>
   </Teleport>
@@ -588,4 +600,6 @@ function adjustCounter(field: 'counters' | 'damages' | 'buffs', delta: number) {
 .ctx-item--ungroup:hover { color: #e09060; background: rgba(200, 100, 60, 0.07); }
 .ctx-item--return       { color: #a0c8e0; }
 .ctx-item--return:hover  { color: #60b8f0; background: rgba(60, 140, 200, 0.1); }
+.ctx-item--baron        { color: #C8AA6E; }
+.ctx-item--baron:hover   { color: #F2E5CD; background: rgba(200, 170, 110, 0.1); }
 </style>
