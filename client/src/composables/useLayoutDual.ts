@@ -207,6 +207,8 @@ export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
     const bfCardW  = cardW.value * BF_CARD_SCALE
 
     const local = store.myUid
+    const opponent = store.opponents[0] ?? ''
+    if (!local || !opponent) return {}
     const result: Record<string, Rect> = {}
 
     // ownerId   = who owns this physical battlefield (their cards go in battlefield_owner row)
@@ -245,8 +247,6 @@ export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
         result[`${playerId}_${k}`] = transform(v)
       }
     }
-
-    const opponent = store.opponents[0] ?? ''
 
     const hasBaronNashor = false
     const bfCount = hasBaronNashor ? 3 : 2
