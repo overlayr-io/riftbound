@@ -135,6 +135,7 @@ function toggleExhausted() {
 
 function onPointerDown(e: PointerEvent) {
   if (e.button !== 0) return
+  hideZoom()
 
   if (isArrowMode.value) {
     e.preventDefault()
@@ -254,8 +255,8 @@ function onContextMenu(e: MouseEvent) {
     @pointerdown="onPointerDown"
     @click="onClick"
     @contextmenu="onContextMenu"
-    @mouseenter="(e) => { isHovered = true; if (canSeeFront && card.description.imageUrl) showZoom(card.description.imageUrl, e.currentTarget as Element) }"
-    @mouseleave="() => { isHovered = false; hideZoom() }"
+    @pointerenter="(e) => { isHovered = true; if (canSeeFront && card.description.imageUrl) showZoom(card.description.imageUrl, e.currentTarget as Element) }"
+    @pointerleave="() => { isHovered = false; hideZoom() }"
   >
     <div class="card-inner" :style="innerStyle">
       <img
