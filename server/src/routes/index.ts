@@ -4,6 +4,7 @@ import gameRoutes from './game.routes'
 import adminRoutes from './admin.routes'
 import userRoutes from './user.routes'
 import betaRoutes from './beta.routes'
+import publicRoutes from './public.routes'
 
 const router = Router()
 
@@ -12,6 +13,7 @@ router.use('/lobbies', lobbyRoutes)
 router.use('/games', gameRoutes)
 router.use('/users', userRoutes)
 router.use('/beta', betaRoutes)
+router.use('/public', publicRoutes)
 router.use('/admin', adminRoutes)
 
 export default router

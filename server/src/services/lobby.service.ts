@@ -3,6 +3,9 @@ import type { GameMode, GameDeckFormat, GameMatchFormat } from '@riftbound/share
 import { MAX_PLAYERS_BY_MODE } from '@riftbound/shared'
 import { LobbyRepository } from '../repositories/lobby.repository'
 import { MessageRepository } from '../repositories/message.repository'
+import { UserRepository } from '../repositories/user.repository'
+
+const userRepo = new UserRepository()
 
 export class LobbyService {
   constructor(
@@ -116,6 +119,7 @@ export class LobbyService {
     if (!lobby) throw new Error('LOBBY_NOT_FOUND')
     if (!lobby.players.has(uid)) throw new Error('PLAYER_NOT_IN_LOBBY')
     if (!text.trim()) throw new Error('EMPTY_MESSAGE')
+    if (await userRepo.isMuted(uid)) throw new Error('MUTED')
     await this.msgRepo.add(lobbyId, uid, text.trim(), 'chat')
   }
 

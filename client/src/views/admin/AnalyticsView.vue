@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
-import type { MetricPoint, QuotaGauge } from '@riftbound/shared'
+import type { MetricPoint } from '@riftbound/shared'
 import { useAdminAnalyticsStore } from '@/stores/adminAnalytics'
 import { adminAnalyticsApi } from '@/services/adminAnalyticsApi'
 

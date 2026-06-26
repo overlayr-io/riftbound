@@ -17,6 +17,8 @@ export interface User {
   /** Modération : fin de suspension temporaire (null = pas suspendu temporairement). */
   suspendedUntil: Date | null
   suspendReason: string | null
+  /** Modération chat : empêche l'envoi de messages. */
+  muted: boolean
   createdAt: Date
   lastSeenAt: Date | null
   deletedAt: Date | null

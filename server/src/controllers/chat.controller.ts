@@ -2,6 +2,8 @@ import type { Request, Response, NextFunction } from 'express'
 import leoProfanity from 'leo-profanity'
 import { ChatRepository } from '../repositories/chat.repository'
 import { GameRepository } from '../repositories/game.repository'
+import { UserRepository } from '../repositories/user.repository'
+import { opsSettingsRepository } from '../repositories/ops-settings.repository'
 
 // Load all available language dictionaries for broad multilingual coverage
 leoProfanity.loadDictionary() // English (default)
@@ -11,9 +13,20 @@ leoProfanity.loadDictionary() // English (default)
 
 const chatRepo = new ChatRepository()
 const gameRepo = new GameRepository()
+const userRepo = new UserRepository()
 
 function param(p: string | string[]): string {
   return Array.isArray(p) ? p[0] : p
+}
+
+/** Censure les mots bloqués personnalisés (config admin) en plus de leo-profanity. */
+function applyExtraWords(text: string, words: string[]): string {
+  let out = text
+  for (const w of words) {
+    if (!w) continue
+    out = out.replace(new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '*'.repeat(w.length))
+  }
+  return out
 }
 
 export async function sendMessage(req: Request, res: Response, next: NextFunction) {
@@ -37,10 +50,16 @@ export async function sendMessage(req: Request, res: Response, next: NextFunctio
       res.status(403).json({ error: 'Not a player in this game' }); return
     }
 
+    // Modération : joueur mute → interdit d'envoyer.
+    if (await userRepo.isMuted(uid)) {
+      res.status(403).json({ error: 'MUTED' }); return
+    }
+
     const playerName = game.playerNames[uid]?.name ?? uid.slice(0, 6)
 
-    // Filter profanity — replace with asterisks rather than reject
-    const clean = leoProfanity.clean(trimmed)
+    // Filter profanity (leo-profanity) + mots bloqués personnalisés (config admin).
+    const cfg = await opsSettingsRepository.getChatConfig()
+    const clean = applyExtraWords(leoProfanity.clean(trimmed), cfg.extraBlockedWords)
 
     const msg = await chatRepo.addMessage(gameId, uid, playerName, clean)
     res.status(201).json(msg)

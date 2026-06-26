@@ -13,6 +13,7 @@ function docToUser(id: string, data: FirebaseFirestore.DocumentData): User {
     betaAccess: (data.betaAccess as BetaAccess) ?? 'none',
     suspendedUntil: data.suspendedUntil?.toDate() ?? null,
     suspendReason: data.suspendReason ?? null,
+    muted: data.muted ?? false,
     createdAt: data.createdAt?.toDate() ?? new Date(),
     lastSeenAt: data.lastSeenAt?.toDate() ?? null,
     deletedAt: data.deletedAt?.toDate() ?? null,
@@ -126,6 +127,18 @@ export class UserRepository {
     )
   }
 
+  async setMuted(uid: string, muted: boolean): Promise<void> {
+    await this.col.doc(uid).set(
+      { muted, updatedAt: FieldValue.serverTimestamp() },
+      { merge: true },
+    )
+  }
+
+  async isMuted(uid: string): Promise<boolean> {
+    const doc = await this.col.doc(uid).get()
+    return doc.exists ? (doc.data()!.muted ?? false) : false
+  }
+
   async setBetaAccess(uid: string, betaAccess: BetaAccess): Promise<void> {
     await this.col.doc(uid).set(
       { betaAccess, updatedAt: FieldValue.serverTimestamp() },
@@ -143,5 +156,24 @@ export class UserRepository {
 
   async hardDelete(uid: string): Promise<void> {
     await this.col.doc(uid).delete()
+  }
+
+  /** RGPD — anonymisation : retire les données personnelles, conserve l'uid (intégrité référentielle). */
+  async anonymize(uid: string): Promise<void> {
+    await this.col.doc(uid).set({
+      email: null,
+      displayName: '(anonymisé)',
+      status: 'banned' as UserStatus,
+      anonymizedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true })
+  }
+
+  /** RGPD — journal de consentement (stocké sur le profil). */
+  async setConsent(uid: string, version: string): Promise<void> {
+    await this.col.doc(uid).set({
+      consentVersion: version,
+      consentAt: FieldValue.serverTimestamp(),
+    }, { merge: true })
   }
 }

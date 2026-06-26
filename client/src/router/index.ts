@@ -7,6 +7,20 @@ import SettingsView from '@/views/SettingsView.vue'
 import GameView from '@/views/GameView.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useBetaStore } from '@/stores/beta'
+import { publicApi } from '@/services/publicApi'
+
+// Cache court (15s) du statut maintenance pour ne pas appeler l'API à chaque nav.
+let maintCache: { value: boolean; at: number } | null = null
+async function checkMaintenance(): Promise<boolean> {
+  if (maintCache && Date.now() - maintCache.at < 15000) return maintCache.value
+  try {
+    const m = await publicApi.maintenance()
+    maintCache = { value: m.enabled, at: Date.now() }
+    return m.enabled
+  } catch {
+    return false
+  }
+}
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -45,6 +59,12 @@ const router = createRouter({
       path: '/welcome',
       name: 'welcome',
       component: () => import('@/views/BetaGateView.vue'),
+      meta: { layout: 'blank' },
+    },
+    {
+      path: '/maintenance',
+      name: 'maintenance',
+      component: () => import('@/views/MaintenanceView.vue'),
       meta: { layout: 'blank' },
     },
 
@@ -104,6 +124,48 @@ const router = createRouter({
       meta: { layout: 'admin', requiresAdmin: true, requiresPermission: ['revenue:read'] },
     },
     {
+      path: '/admin/cards',
+      name: 'admin-cards',
+      component: () => import('@/views/admin/CardsView.vue'),
+      meta: { layout: 'admin', requiresAdmin: true, requiresPermission: ['content:cards_manage'] },
+    },
+    {
+      path: '/admin/patch-notes',
+      name: 'admin-patch-notes',
+      component: () => import('@/views/admin/PatchNotesAdminView.vue'),
+      meta: { layout: 'admin', requiresAdmin: true, requiresPermission: ['content:patchnotes_manage'] },
+    },
+    {
+      path: '/admin/announcements',
+      name: 'admin-announcements',
+      component: () => import('@/views/admin/AnnouncementsView.vue'),
+      meta: { layout: 'admin', requiresAdmin: true, requiresPermission: ['content:announce'] },
+    },
+    {
+      path: '/admin/moderation',
+      name: 'admin-moderation',
+      component: () => import('@/views/admin/ChatModerationView.vue'),
+      meta: { layout: 'admin', requiresAdmin: true, requiresPermission: ['players:suspend'] },
+    },
+    {
+      path: '/admin/ops',
+      name: 'admin-ops',
+      component: () => import('@/views/admin/OpsView.vue'),
+      meta: { layout: 'admin', requiresAdmin: true, requiresPermission: ['ops:feature_flags'] },
+    },
+    {
+      path: '/admin/bug-reports',
+      name: 'admin-bug-reports',
+      component: () => import('@/views/admin/BugReportsView.vue'),
+      meta: { layout: 'admin', requiresAdmin: true, requiresPermission: ['players:read'] },
+    },
+    {
+      path: '/admin/errors',
+      name: 'admin-errors',
+      component: () => import('@/views/admin/ErrorLogsView.vue'),
+      meta: { layout: 'admin', requiresAdmin: true, requiresPermission: ['analytics:read'] },
+    },
+    {
       path: '/admin/audit',
       name: 'admin-audit',
       component: () => import('@/views/admin/AuditLogView.vue'),
@@ -135,13 +197,19 @@ router.beforeEach(async (to) => {
   }
 
   // ── Gate beta (joueur) ──
-  // Routes hors-jeu (admin/login/welcome) : pas de gate.
+  // Routes hors-jeu (admin/login/welcome/maintenance) : pas de gate.
   if (to.meta.layout === 'blank' || to.path.startsWith('/admin')) return true
 
   const auth = useAuthStore()
   await auth.waitForInit()
   // Une session « voir comme » contourne le gate (l'admin observe un joueur).
   if (auth.isImpersonating) return true
+
+  // ── Mode maintenance (joueur) ── les admins ne sont pas bloqués.
+  if (!auth.isAdmin) {
+    const maint = await checkMaintenance()
+    if (maint && to.name !== 'maintenance') return { name: 'maintenance' }
+  }
 
   const beta = useBetaStore()
   const access = beta.state ?? (await beta.refresh())

@@ -6,6 +6,7 @@ import { SUSPENSION_PRESETS } from '@riftbound/shared'
 import { useAdminUsersStore } from '@/stores/adminUsers'
 import { useAuthStore } from '@/stores/auth'
 import { adminUsersApi } from '@/services/adminUsersApi'
+import { adminSupportApi } from '@/services/adminSupportApi'
 
 const route = useRoute()
 const router = useRouter()
@@ -39,6 +40,15 @@ const resetName = () => run(() => adminUsersApi.resetDisplayName(uid.value, newN
 const forceLogout = () => run(() => adminUsersApi.forceLogout(uid.value), 'Déconnexion forcée.')
 const softDelete = () => run(() => adminUsersApi.softDelete(uid.value), 'Compte soft-delete.')
 const hardDelete = () => run(async () => { await adminUsersApi.hardDelete(uid.value); router.push('/admin/users') }, 'Compte supprimé.')
+
+const confirmAnonymize = ref('')
+async function exportData() {
+  busy.value = true; msg.value = null; isError.value = false
+  try { await adminSupportApi.exportUserData(uid.value); msg.value = 'Export JSON téléchargé.' }
+  catch { isError.value = true; msg.value = 'Export impossible.' }
+  finally { busy.value = false }
+}
+const anonymize = () => run(() => adminSupportApi.anonymizeUser(uid.value), 'Compte anonymisé (RGPD).')
 
 async function impersonate() {
   busy.value = true
@@ -151,6 +161,13 @@ function fmt(iso: string | null): string {
             <template v-if="auth.can('players:delete')">
               <input v-model="confirmHardDelete" class="adm-input danger-input" :placeholder="`tape ${detail.uid.slice(0,8)} pour hard-delete`" />
               <button class="adm-btn danger-btn full" :disabled="busy || confirmHardDelete !== detail.uid.slice(0,8)" @click="hardDelete">Hard-delete (définitif)</button>
+            </template>
+
+            <div class="subhead">RGPD</div>
+            <button class="adm-btn adm-btn--ghost full" :disabled="busy" @click="exportData">Exporter les données (JSON)</button>
+            <template v-if="auth.can('players:delete')">
+              <input v-model="confirmAnonymize" class="adm-input danger-input" :placeholder="`tape ${detail.uid.slice(0,8)} pour anonymiser`" />
+              <button class="adm-btn danger-btn full" :disabled="busy || confirmAnonymize !== detail.uid.slice(0,8)" @click="anonymize">Droit à l'effacement (anonymiser)</button>
             </template>
 
             <div v-if="auth.can('players:impersonate')" class="subhead">Debug</div>

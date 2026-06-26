@@ -52,7 +52,7 @@ export class AdminUsersService {
       }
     } catch { /* user may not exist in auth (seed data) */ }
 
-    return { ...toSummary(u), suspendReason: u.suspendReason, deletedAt: u.deletedAt, games, session }
+    return { ...toSummary(u), suspendReason: u.suspendReason, muted: u.muted, deletedAt: u.deletedAt, games, session }
   }
 
   async suspend(actor: AuditActor, uid: string, durationMs: number, reason: string): Promise<UserDetail> {

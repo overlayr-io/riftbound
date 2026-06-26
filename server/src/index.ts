@@ -6,14 +6,17 @@ import './config/firebase'
 import router from './routes'
 import { errorHandler } from './middlewares/error.middleware'
 import { metricsMiddleware } from './middlewares/metrics.middleware'
+import { limiters } from './middlewares/rate-limit.middleware'
 
 const app = express()
 
+app.set('trust proxy', 1) // Render/Railway derrière un proxy → req.ip correct
 app.use(helmet())
 app.use(cors({ origin: env.CLIENT_URL }))
 app.use(express.json())
 
 app.use('/api', metricsMiddleware)
+app.use('/api', limiters.global) // garde-fou anti-flood par IP
 app.use('/api', router)
 app.use(errorHandler)
 

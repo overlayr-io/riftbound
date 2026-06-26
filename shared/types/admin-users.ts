@@ -24,6 +24,7 @@ export interface UserSession {
 
 export interface UserDetail extends UserSummary {
   suspendReason: string | null
+  muted: boolean
   deletedAt: Date | null
   games: GameSummary[]
   session: UserSession

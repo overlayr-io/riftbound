@@ -1,7 +1,20 @@
 <script setup lang="ts">
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { publicApi, type PatchNotePublicDto } from '@/services/publicApi'
 
 const router = useRouter()
+const notes = ref<PatchNotePublicDto[]>([])
+const loading = ref(true)
+
+onMounted(async () => {
+  try { notes.value = await publicApi.patchNotes() } catch { /* noop */ }
+  finally { loading.value = false }
+})
+
+function fmt(iso: string | null): string {
+  return iso ? new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : ''
+}
 </script>
 
 <template>
@@ -22,11 +35,23 @@ const router = useRouter()
 
     <!-- Body -->
     <div class="patch-notes-body">
-      <div class="empty-state">
+      <div v-if="loading" class="empty-state">
+        <span class="empty-state__diamond">◆</span>
+        <p class="empty-state__text">Chargement…</p>
+      </div>
+      <div v-else-if="notes.length === 0" class="empty-state">
         <span class="empty-state__diamond">◆</span>
         <p class="empty-state__text">Aucune mise à jour pour l'instant</p>
         <p class="empty-state__sub">Revenez bientôt</p>
       </div>
+      <article v-for="n in notes" v-else :key="n.id" class="note">
+        <div class="note-head">
+          <h3 class="note-title">{{ n.title }}</h3>
+          <span class="note-version">{{ n.version }}</span>
+        </div>
+        <span class="note-date">{{ fmt(n.publishedAt) }}</span>
+        <p class="note-body">{{ n.body }}</p>
+      </article>
     </div>
 
   </div>
@@ -95,4 +120,19 @@ const router = useRouter()
   color: #2a4a50;
   text-transform: uppercase;
 }
+
+/* Notes */
+.note {
+  background: linear-gradient(180deg, #0a1828 0%, #060f1b 100%);
+  border: 1px solid rgba(200,170,110,0.12);
+  padding: 1rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.note-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
+.note-title { font-size: 0.95rem; font-weight: 700; color: #F2E5CD; }
+.note-version { font-size: 0.7rem; color: #C8AA6E; letter-spacing: 0.1em; }
+.note-date { font-size: 0.62rem; letter-spacing: 0.15em; color: #4a6a70; text-transform: uppercase; }
+.note-body { font-size: 0.85rem; color: #aeb4c0; line-height: 1.55; white-space: pre-wrap; }
 </style>

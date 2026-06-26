@@ -68,6 +68,43 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ── Contenu & ops (écrits par le serveur) ────────────────────────────────
+    // Lisibles par tout joueur authentifié (publiés/actifs filtrés côté serveur).
+    match /patchNotes/{id} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+    match /announcements/{id} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+    match /featureFlags/{key} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+    match /cards/{id} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+    match /opsSettings/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+    // Signalements : admin uniquement (lecture), écriture serveur.
+    match /messageReports/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    // Bug reports & capture d'erreurs : admin (lecture), écriture serveur.
+    match /bugReports/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /errorLogs/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     // Refus par défaut pour tout chemin non couvert.
     match /{document=**} {
       allow read, write: if false;

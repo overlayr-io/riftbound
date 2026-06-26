@@ -138,6 +138,7 @@ export async function sendMessage(req: Request, res: Response, next: NextFunctio
       if (err.message === 'LOBBY_NOT_FOUND') { res.status(404).json({ error: 'Lobby not found' }); return }
       if (err.message === 'PLAYER_NOT_IN_LOBBY') { res.status(403).json({ error: 'Not in lobby' }); return }
       if (err.message === 'EMPTY_MESSAGE') { res.status(400).json({ error: 'Empty message' }); return }
+      if (err.message === 'MUTED') { res.status(403).json({ error: 'MUTED' }); return }
     }
     next(err)
   }

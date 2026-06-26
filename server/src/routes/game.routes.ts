@@ -14,11 +14,14 @@ import {
 } from '../controllers/game.controller'
 import { sendMessage, getLogs } from '../controllers/chat.controller'
 import { requireAuth } from '../middlewares/auth.middleware'
+import { maintenanceGuard } from '../middlewares/maintenance.middleware'
+import { limiters } from '../middlewares/rate-limit.middleware'
 import { env } from '../config/env'
 
 const router = Router()
 
 router.use(requireAuth)
+router.use(maintenanceGuard)
 
 router.post('/', startGame)
 router.patch('/:gameId/rounds/:roundId/deck', submitDeck)
@@ -30,7 +33,7 @@ router.post('/:gameId/rounds/:roundId/discard-battlefield/confirm', confirmDisca
 router.post('/:gameId/rounds/:roundId/mulligan', submitMulligan)
 router.post('/:gameId/rounds/:roundId/sideboard', submitSideboard)
 router.post('/:gameId/rounds/:roundId/next-round', nextRound)
-router.post('/:gameId/messages', sendMessage)
+router.post('/:gameId/messages', limiters.chat, sendMessage)
 router.get('/:gameId/logs', getLogs)
 
 if (env.NODE_ENV !== 'production') {
