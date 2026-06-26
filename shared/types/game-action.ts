@@ -126,6 +126,28 @@ export type SetBuffAction = {
   value: number | null
 }
 
+// ── Control actions ───────────────────────────────────────────────────────────
+
+export type CopyCardAction = {
+  type: 'COPY_CARD'
+  playerId: PlayerId
+  sourceCardId: string
+  newCardId: string
+}
+
+export type TakeControlAction = {
+  type: 'TAKE_CONTROL'
+  playerId: PlayerId
+  cardId: string
+  temporary: boolean
+}
+
+export type ReturnControlAction = {
+  type: 'RETURN_CONTROL'
+  playerId: PlayerId
+  cardId: string
+}
+
 // ── Token actions ─────────────────────────────────────────────────────────────
 
 export type CreateTokenAction = {
@@ -167,6 +189,9 @@ export type GameAction =
   | SetBuffAction
   | CreateTokenAction
   | DestroyTokenAction
+  | CopyCardAction
+  | TakeControlAction
+  | ReturnControlAction
   // | CopyCardAction
   // | RevealCardForControllerAction
   // | GroupCardAction

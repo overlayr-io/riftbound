@@ -45,6 +45,10 @@ export interface CardState {
   isToken: boolean
   /** True when this card is a temporary stack copy — destroyed on any move out of the stack zone. */
   isStackCopy?: boolean
+  /** Original ownerId when controlled by another player — used to return the card. */
+  loanedFromId?: PlayerId
+  /** True when the control expires at end of turn. */
+  loanedUntilEndOfTurn?: boolean
 }
 
 

@@ -514,6 +514,12 @@ export const useGameStore = defineStore('game', () => {
         return `${who} a créé le token "${action.name}"`
       case 'DESTROY_TOKEN':
         return `${who} a détruit le token ${cardName(action.cardId)}`
+      case 'COPY_CARD':
+        return `${who} a copié ${cardName(action.sourceCardId)}`
+      case 'TAKE_CONTROL':
+        return `${who} a pris le contrôle de ${cardName(action.cardId)}${action.temporary ? ' (jusqu\'à la fin du tour)' : ''}`
+      case 'RETURN_CONTROL':
+        return `${who} a rendu ${cardName(action.cardId)} à son propriétaire`
       case 'SET_COUNTERS':
         return action.value !== null
           ? `${who} a mis ${action.value} compteur(s) sur ${cardName(action.cardId)}`
@@ -801,6 +807,83 @@ export const useGameStore = defineStore('game', () => {
         destroyToken(action.cardId)
         break
 
+      case 'COPY_CARD': {
+        const src = round.cards[action.sourceCardId]
+        if (!src) return
+        const zoneCards = Object.values(round.cards).filter(c => c.zoneId === src.zoneId)
+        const copyOrder = Math.max(-1, ...zoneCards.map(c => c.order)) + 1
+        const copy: CardState = {
+          cardId: action.newCardId,
+          baseCardId: src.baseCardId,
+          description: { ...src.description },
+          ownerId: action.playerId,
+          controllerId: action.playerId,
+          zoneId: src.zoneId,
+          order: copyOrder,
+          state: { exhausted: false, counters: null, damages: null, buffs: null, visibleTo: 'ALL', groupTo: [] },
+          isToken: true,
+        }
+        round.cards[action.newCardId] = copy
+        updateDoc(ref, {
+          [`cards.${action.newCardId}`]: copy,
+          _updatedBy: sessionId,
+          updatedAt: serverTimestamp(),
+        }).catch(console.error)
+        break
+      }
+
+      case 'TAKE_CONTROL': {
+        const card = round.cards[action.cardId]
+        if (!card) return
+        const originalOwnerId = card.ownerId
+        const baseCards = Object.values(round.cards).filter(c => c.ownerId === action.playerId && c.zoneId === 'base')
+        const baseOrder = Math.max(-1, ...baseCards.map(c => c.order)) + 1
+        const updated: CardState = {
+          ...card,
+          ownerId: action.playerId,
+          controllerId: action.playerId,
+          zoneId: 'base',
+          order: baseOrder,
+          loanedFromId: originalOwnerId,
+          loanedUntilEndOfTurn: action.temporary || undefined,
+          state: { ...card.state, exhausted: false },
+        }
+        round.cards[action.cardId] = updated
+        updateDoc(ref, {
+          [`cards.${action.cardId}.ownerId`]:               action.playerId,
+          [`cards.${action.cardId}.controllerId`]:          action.playerId,
+          [`cards.${action.cardId}.zoneId`]:                'base',
+          [`cards.${action.cardId}.order`]:                 baseOrder,
+          [`cards.${action.cardId}.loanedFromId`]:          originalOwnerId,
+          [`cards.${action.cardId}.loanedUntilEndOfTurn`]:  action.temporary ? true : deleteField(),
+          [`cards.${action.cardId}.state.exhausted`]:       false,
+          _updatedBy: sessionId,
+          updatedAt: serverTimestamp(),
+        }).catch(console.error)
+        break
+      }
+
+      case 'RETURN_CONTROL': {
+        const card = round.cards[action.cardId]
+        if (!card?.loanedFromId) return
+        const returnTo = card.loanedFromId
+        const returnBase = Object.values(round.cards).filter(c => c.ownerId === returnTo && c.zoneId === 'base')
+        const returnOrder = Math.max(-1, ...returnBase.map(c => c.order)) + 1
+        const updated: CardState = { ...card, ownerId: returnTo, controllerId: returnTo, zoneId: 'base', order: returnOrder, loanedFromId: undefined, loanedUntilEndOfTurn: undefined }
+        round.cards[action.cardId] = updated
+        updateDoc(ref, {
+          [`cards.${action.cardId}.ownerId`]:              returnTo,
+          [`cards.${action.cardId}.controllerId`]:         returnTo,
+          [`cards.${action.cardId}.zoneId`]:               'base',
+          [`cards.${action.cardId}.order`]:                returnOrder,
+          [`cards.${action.cardId}.loanedFromId`]:         deleteField(),
+          [`cards.${action.cardId}.loanedUntilEndOfTurn`]: deleteField(),
+          _updatedBy: sessionId,
+          updatedAt: serverTimestamp(),
+        }).catch(console.error)
+        break
+      }
+
       case 'SET_COUNTERS':
       case 'SET_DAMAGES':
       case 'SET_BUFF': {
@@ -973,12 +1056,28 @@ export const useGameStore = defineStore('game', () => {
     const nextId  = allIds[(idx + 1) % allIds.length]
     const nextNum = (round.currentTurn?.turn ?? 0) + 1
 
-    round.currentTurn = { playerId: nextId, turn: nextNum }
-    updateDoc(ref, {
+    const updates: Record<string, unknown> = {
       currentTurn: { playerId: nextId, turn: nextNum },
-      _updatedBy: sessionId,
-      updatedAt: serverTimestamp(),
-    }).catch(console.error)
+    }
+
+    // Return temporarily controlled (loaned) cards to their original owner
+    for (const [id, card] of Object.entries(round.cards)) {
+      if (card.controllerId === uid && card.loanedFromId && card.loanedUntilEndOfTurn) {
+        const returnTo = card.loanedFromId
+        const returnBase = Object.values(round.cards).filter(c => c.ownerId === returnTo && c.zoneId === 'base')
+        const returnOrder = Math.max(-1, ...returnBase.map(c => c.order)) + 1
+        round.cards[id] = { ...card, ownerId: returnTo, controllerId: returnTo, zoneId: 'base', order: returnOrder, loanedFromId: undefined, loanedUntilEndOfTurn: undefined }
+        updates[`cards.${id}.ownerId`]              = returnTo
+        updates[`cards.${id}.controllerId`]         = returnTo
+        updates[`cards.${id}.zoneId`]               = 'base'
+        updates[`cards.${id}.order`]                = returnOrder
+        updates[`cards.${id}.loanedFromId`]         = deleteField()
+        updates[`cards.${id}.loanedUntilEndOfTurn`] = deleteField()
+      }
+    }
+
+    round.currentTurn = { playerId: nextId, turn: nextNum }
+    updateDoc(ref, { ...updates, _updatedBy: sessionId, updatedAt: serverTimestamp() }).catch(console.error)
 
     writeLog(`${actorName(uid)} passe le tour`, uid)
   }

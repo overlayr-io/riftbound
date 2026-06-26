@@ -20,6 +20,14 @@ const gameStore = useGameStore()
 const shortcuts = useBoardShortcuts()
 
 const hasChildren = computed(() => (props.card?.state.groupTo?.length ?? 0) > 0)
+const isLoaned = computed(() => !!props.card?.loanedFromId)
+
+function returnControl() {
+  if (!props.card) return
+  gameStore.applyAction({ type: 'RETURN_CONTROL', playerId: props.currentPlayerId, cardId: props.card.cardId })
+  emit('close')
+}
+
 const isChild = computed(() => {
   if (!props.card) return false
   return Object.values(gameStore.currentRound?.cards ?? {}).some(
@@ -148,6 +156,17 @@ function adjustCounter(field: 'counters' | 'damages' | 'buffs', delta: number) {
           {{ card.description.name || 'Carte' }}
         </div>
         <div class="ctx-header-sep" />
+
+        <!-- Retourner chez le propriétaire (carte sous contrôle) -->
+        <template v-if="isLoaned">
+          <div class="ctx-item ctx-item--return" @click="returnControl">
+            <span class="ctx-icon">
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8 L8 3 L8 6 C12 6 14 9 14 13 C12 10 9 9 8 9 L8 13 Z"/></svg>
+            </span>
+            <span class="ctx-label">Retourner chez le propriétaire</span>
+          </div>
+          <div class="ctx-sep" />
+        </template>
 
         <!-- Vers le deck -->
         <div
@@ -567,4 +586,6 @@ function adjustCounter(field: 'counters' | 'damages' | 'buffs', delta: number) {
 .ctx-item--group:hover  { color: #a0e8c0; background: rgba(60, 200, 130, 0.07); }
 .ctx-item--ungroup      { color: #8aabb0; font-size: 10px; }
 .ctx-item--ungroup:hover { color: #e09060; background: rgba(200, 100, 60, 0.07); }
+.ctx-item--return       { color: #a0c8e0; }
+.ctx-item--return:hover  { color: #60b8f0; background: rgba(60, 140, 200, 0.1); }
 </style>

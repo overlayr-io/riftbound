@@ -9,6 +9,7 @@ import { useCardZoom } from '@/composables/useCardZoom'
 import cardBack from '@/assets/img/card_back.png'
 import runeIcon from '@/assets/img/rune_icon.png'
 import CardContextMenu from '@/components/game/CardContextMenu.vue'
+import OpponentCardContextMenu from '@/components/game/OpponentCardContextMenu.vue'
 import CardZoomPopup from '@/components/game/CardZoomPopup.vue'
 
 const { zoom, showZoom, hideZoom } = useCardZoom()
@@ -180,12 +181,17 @@ function onClick() {
 // ── Context menu ──────────────────────────────────────────────────────────────
 
 const RUNE_ZONES = new Set(['runes', 'runes_deck'])
+const OPPONENT_CTX_ZONES = new Set(['base', 'battlefield', 'battlefield_owner', 'battlefield_opponent'])
 
 const isRuneInPlay = computed(() =>
   props.card.zoneId === 'runes' &&
   props.card.description.type === 'rune' &&
   isOwned.value
 )
+
+const oppCtxVisible = ref(false)
+const oppCtxX = ref(0)
+const oppCtxY = ref(0)
 
 function onRecycleRune(e: MouseEvent) {
   e.preventDefault()
@@ -215,7 +221,16 @@ const ctxX = ref(0)
 const ctxY = ref(0)
 
 function onContextMenu(e: MouseEvent) {
-  if (!isOwned.value) return
+  if (!isOwned.value) {
+    // Opponent card — show opponent context menu in allowed zones
+    if (OPPONENT_CTX_ZONES.has(props.card.zoneId)) {
+      e.preventDefault()
+      oppCtxX.value = e.clientX
+      oppCtxY.value = e.clientY
+      oppCtxVisible.value = true
+    }
+    return
+  }
   if (RUNE_ZONES.has(props.card.zoneId)) return
   e.preventDefault()
   ctxX.value = e.clientX
@@ -325,6 +340,15 @@ function onContextMenu(e: MouseEvent) {
     :y="ctxY"
     :current-player-id="currentPlayerId"
     @close="ctxVisible = false"
+  />
+
+  <OpponentCardContextMenu
+    :visible="oppCtxVisible"
+    :card="card"
+    :x="oppCtxX"
+    :y="oppCtxY"
+    :current-player-id="currentPlayerId"
+    @close="oppCtxVisible = false"
   />
 
   <CardZoomPopup :zoom="zoom" />
