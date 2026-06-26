@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 
+import { computed } from 'vue'
 import CardView from "@/components/game/CardView.vue";
 import {useGameStore} from "@/stores/game.ts";
 import {useLayout, SEPARATOR} from "@/composables/useLayout.ts";
@@ -7,8 +8,13 @@ import {useViewport} from "@/composables/useViewport.ts";
 import ZoneView from "@/components/game/ZoneView.vue";
 import { useBoardShortcuts } from '@/composables/useBoardShortcuts'
 import type {Rect} from "@/types/card.type.ts";
+import type { CardState } from '@riftbound/shared'
 
 const store = useGameStore()
+
+const allCards = computed<readonly CardState[]>(() =>
+  Object.values(store.currentRound?.cards ?? {}),
+)
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 
@@ -123,11 +129,11 @@ function bleedRect(rect: Rect): Rect {
 
       <!-- Cards -->
       <div class="cards-layer">
-        <template v-for="(card, i) in []" :key="i">
+        <template v-for="card in allCards" :key="card.cardId">
           <CardView
-              v-if="layouts.get(card.id)"
+              v-if="layouts.get(card.cardId)"
               :card="card"
-              :layout="layouts.get(card.id)!"
+              :layout="layouts.get(card.cardId)!"
               :current-player-id="store.myUid ?? ''"
           />
         </template>

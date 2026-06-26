@@ -7,6 +7,7 @@ import {useViewport} from "@/composables/useViewport.ts";
 import ZoneView from "@/components/game/ZoneView.vue";
 import { useBoardShortcuts } from '@/composables/useBoardShortcuts'
 import type {Rect} from "@/types/card.type.ts";
+import type { CardState } from '@riftbound/shared';
 
 const store = useGameStore()
 
@@ -121,11 +122,11 @@ function bleedRect(rect: Rect): Rect {
 
       <!-- Cards -->
       <div class="cards-layer" style="z-index:3">
-        <template v-for="(card, i) in []" :key="i">
+        <template v-for="(card, i) in ([] as CardState[])" :key="i">
           <CardView
-              v-if="layouts.get(card.id)"
+              v-if="layouts.get(card.cardId)"
               :card="card"
-              :layout="layouts.get(card.id)!"
+              :layout="layouts.get(card.cardId)!"
               :current-player-id="store.myUid ?? ''"
           />
         </template>

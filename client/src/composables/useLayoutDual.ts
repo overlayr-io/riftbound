@@ -148,11 +148,6 @@ export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
     layoutRow(zone, cards, out, true)
   }
 
-  // Row for battlefield units (same as layoutRow).
-  function layoutBattlefield(zone: Rect, cards: CardState[], out: Map<string, CardLayout>) {
-    layoutRow(zone, cards, out)
-  }
-
   // Overlapping fan: all cards at same center, older cards rotated −10° each (cssRotation).
   // Max 6 visible. Cards are sized to fill the zone while keeping aspect ratio.
   function layoutStack(zone: Rect, cards: CardState[], out: Map<string, CardLayout>) {

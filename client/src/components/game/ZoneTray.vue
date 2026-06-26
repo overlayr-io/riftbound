@@ -5,7 +5,7 @@ import cardBack from '@/assets/img/card_back.png'
 
 export type ZoneTrayAction = 'top' | 'bottom' | 'hand' | 'discard' | 'banish'
 
-const props = defineProps<{
+defineProps<{
   open: boolean
   cards: CardState[]
   title: string

@@ -11,3 +11,4 @@ database-debug.log
 ui-debug.log
 /.claude/
 /.idea/
+/serviceAccount.json

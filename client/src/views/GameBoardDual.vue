@@ -194,8 +194,6 @@ const hasIvernLegend = computed(() => {
 const brushTokens = computed(() =>
   allCards.value.filter(c => c.isToken && c.zoneId === 'battlefield' && c.description.name === 'Brush')
 )
-// Pour l'overlay de suppression par clic droit (garde le premier trouvé pour la compatibilité du menu)
-const brushToken = computed(() => brushTokens.value[0] ?? null)
 
 const brushDeleteMenuX = ref(0)
 const brushDeleteMenuY = ref(0)
@@ -913,34 +911,8 @@ function shuffleMyHand() {
   store.shuffleHand(uid)
 }
 
-// ── Player colors ─────────────────────────────────────────────────────────────
 
-const PALETTE = ['#4fc3f7', '#ef5350', '#66bb6a', '#ffa726']
-const shuffled = [...PALETTE].sort(() => Math.random() - 0.5)
-const playerColors: Record<string, string> = Object.fromEntries(
-  store.playerIds.map((id: string, i: number) => [id, shuffled[i % shuffled.length]])
-)
 
-function playerIdFromKey(key: string): string | null {
-  for (const id of store.playerIds) {
-    if (key.startsWith(id + '_') || key.startsWith(id + SEPARATOR)) return id
-  }
-  return null
-}
-
-function colorOfZoneKey(key: string): string | undefined {
-  const pid = playerIdFromKey(key)
-  return pid ? playerColors[pid] : undefined
-}
-
-function colorOfPlayerId(pid: string): string {
-  return playerColors[pid] ?? '#ffffff'
-}
-
-function bfKey(zoneKey: string): string {
-  const pid = playerIdFromKey(zoneKey) ?? zoneKey.split(SEPARATOR)[0]
-  return pid + SEPARATOR + 'battlefield'
-}
 
 const BLEED = 8
 function bleedRect(rect: Rect): Rect {
@@ -961,7 +933,7 @@ function bleedRect(rect: Rect): Rect {
 
       <!-- Player territories -->
       <div class="players-layer">
-        <template v-for="(rect, key) in playersZone" :key="key">
+        <template v-for="(rect, _key) in playersZone" :key="_key">
           <div
             class="player-zone"
             :style="{

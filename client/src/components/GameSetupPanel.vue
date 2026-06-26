@@ -324,7 +324,7 @@ function usedBfRound(bfId: string): number | null {
           }"
           :disabled="usedBfRound(bf.id) !== null"
           @click="usedBfRound(bf.id) === null && (selectedBFId = bf.id, emit('selectBattlefield', bf))"
-          @mouseenter="bf.imageUrl && showZoom(bf.imageUrl, $event.currentTarget as Element, card.type)"
+          @mouseenter="bf.imageUrl && showZoom(bf.imageUrl, $event.currentTarget as Element, bf.type)"
           @mouseleave="hideZoom"
         >
           <div class="bf-card__img">

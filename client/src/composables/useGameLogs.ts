@@ -52,7 +52,7 @@ export function useGameLogs(gameId: () => string | null) {
   }
 
   async function logAction(
-    action: { type: string },
+    _action: { type: string },
     playerId: string,
     playerNames: Record<string, { name: string }>,
   ) {
