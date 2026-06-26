@@ -9,6 +9,8 @@ import TokenCreationPanel from '@/components/game/TokenCreationPanel.vue'
 import DeckContextMenu from '@/components/game/DeckContextMenu.vue'
 import HandContextMenu from '@/components/game/HandContextMenu.vue'
 import VisionTray from '@/components/game/VisionTray.vue'
+import ZoneTray from '@/components/game/ZoneTray.vue'
+import type { ZoneTrayAction } from '@/components/game/ZoneTray.vue'
 import RevealBanner from '@/components/game/RevealBanner.vue'
 import ShowdownPanel from '@/components/game/ShowdownPanel.vue'
 import { useGameStore } from '@/stores/game'
@@ -677,6 +679,85 @@ function canCreateShowdown(key: string): boolean {
   return !store.currentRound?.showdowns?.[owner]
 }
 
+// ── Discard tray ──────────────────────────────────────────────────────────────
+
+const discardTrayOpen = ref(false)
+const banishTrayOpen = ref(false)
+
+const discardTrayCards = computed(() => {
+  const uid = store.myUid
+  if (!uid) return []
+  return allCards.value
+    .filter(c => c.ownerId === uid && c.zoneId === 'discard')
+    .slice()
+    .sort((a, b) => b.order - a.order)
+})
+
+const banishTrayCards = computed(() => {
+  const uid = store.myUid
+  if (!uid) return []
+  return allCards.value
+    .filter(c => c.ownerId === uid && c.zoneId === 'banish')
+    .slice()
+    .sort((a, b) => b.order - a.order)
+})
+
+function onDiscardTrayAction(cardId: string, action: ZoneTrayAction) {
+  const uid = store.myUid ?? ''
+  const who = store.actorName(uid)
+  switch (action) {
+    case 'top':
+      store.sendToDeck(cardId, 'main_deck', 'top', false)
+      store.writeLog(`${who} a remis une carte sur le dessus de son deck depuis la défausse`, uid)
+      break
+    case 'bottom':
+      store.sendToDeck(cardId, 'main_deck', 'bottom', false)
+      store.writeLog(`${who} a remis une carte sous son deck depuis la défausse`, uid)
+      break
+    case 'hand':
+      store.applyAction({ type: 'MOVE_TO_HAND', playerId: uid, cardId, fromZoneId: 'discard' })
+      store.writeLog(`${who} a remis une carte en main depuis la défausse`, uid)
+      break
+    case 'banish':
+      store.applyAction({ type: 'BANISH_CARD', playerId: uid, cardId, fromZoneId: 'discard' })
+      store.writeLog(`${who} a banni une carte depuis la défausse`, uid)
+      break
+  }
+}
+
+function onBanishTrayAction(cardId: string, action: ZoneTrayAction) {
+  const uid = store.myUid ?? ''
+  const who = store.actorName(uid)
+  switch (action) {
+    case 'top':
+      store.sendToDeck(cardId, 'main_deck', 'top', false)
+      store.writeLog(`${who} a remis une carte sur le dessus de son deck depuis les bannis`, uid)
+      break
+    case 'bottom':
+      store.sendToDeck(cardId, 'main_deck', 'bottom', false)
+      store.writeLog(`${who} a remis une carte sous son deck depuis les bannis`, uid)
+      break
+    case 'hand':
+      store.applyAction({ type: 'MOVE_TO_HAND', playerId: uid, cardId, fromZoneId: 'banish' })
+      store.writeLog(`${who} a remis une carte en main depuis les bannis`, uid)
+      break
+    case 'discard':
+      store.applyAction({ type: 'DISCARD_CARD', playerId: uid, cardId, fromZoneId: 'banish' })
+      store.writeLog(`${who} a défaussé une carte depuis les bannis`, uid)
+      break
+  }
+}
+
+function isDiscardZone(key: string): boolean {
+  const { owner, zone } = parseZoneKey(key)
+  return !!owner && owner === store.myUid && zone === 'discard'
+}
+
+function isBanishZone(key: string): boolean {
+  const { owner, zone } = parseZoneKey(key)
+  return !!owner && owner === store.myUid && zone === 'banish'
+}
+
 // ── Hand actions ───────────────────────────────────────────────────────────────
 
 const handMenuVisible = ref(false)
@@ -844,6 +925,24 @@ function bleedRect(rect: Rect): Rect {
             >+</button>
           </div>
 
+          <!-- Click overlay for discard zone (opens tray) -->
+          <div
+            v-if="isDiscardZone(String(key)) && rect.w > 0"
+            class="zone-overlay zone-click-overlay"
+            style="pointer-events: auto"
+            :style="{ left: rect.x + 'px', top: rect.y + 'px', width: rect.w + 'px', height: rect.h + 'px' }"
+            @click="discardTrayOpen = true"
+          />
+
+          <!-- Click overlay for banish zone (opens tray) -->
+          <div
+            v-if="isBanishZone(String(key)) && rect.w > 0"
+            class="zone-overlay zone-click-overlay"
+            style="pointer-events: auto"
+            :style="{ left: rect.x + 'px', top: rect.y + 'px', width: rect.w + 'px', height: rect.h + 'px' }"
+            @click="banishTrayOpen = true"
+          />
+
           <!-- Showdown creation button for battlefield_owner -->
           <div
             v-if="canCreateShowdown(String(key)) && rect.w > 0"
@@ -1006,6 +1105,26 @@ function bleedRect(rect: Rect): Rect {
         @pass="onPass(panel.sd)"
         @conquer="onConquer(panel.sd)"
         @close="onCloseShowdown(panel.sd)"
+      />
+
+      <!-- Discard tray -->
+      <ZoneTray
+        :open="discardTrayOpen"
+        :cards="discardTrayCards"
+        :title="`Défausse — ${discardTrayCards.length} carte${discardTrayCards.length !== 1 ? 's' : ''}`"
+        :actions="['hand', 'top', 'bottom', 'banish']"
+        @action="onDiscardTrayAction"
+        @close="discardTrayOpen = false"
+      />
+
+      <!-- Banish tray -->
+      <ZoneTray
+        :open="banishTrayOpen"
+        :cards="banishTrayCards"
+        :title="`Bannis — ${banishTrayCards.length} carte${banishTrayCards.length !== 1 ? 's' : ''}`"
+        :actions="['hand', 'top', 'bottom', 'discard']"
+        @action="onBanishTrayAction"
+        @close="banishTrayOpen = false"
       />
 
       <!-- Token creation panel -->
