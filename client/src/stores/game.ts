@@ -351,6 +351,23 @@ export const useGameStore = defineStore('game', () => {
     updateDoc(ref, { ...updates, _updatedBy: sessionId, updatedAt: serverTimestamp() }).catch(console.error)
   }
 
+  function shuffleHand(ownerId: string) {
+    const round = currentRound.value
+    const ref = roundRef()
+    if (!round || !ref) return
+    const handCards = Object.values(round.cards).filter(c => c.zoneId === 'hand' && c.ownerId === ownerId)
+    if (handCards.length < 2) return
+    const orders = handCards.map(c => c.order).sort((a, b) => a - b)
+    let shuffled = [...orders].sort(() => Math.random() - 0.5)
+    shuffled = shuffled.sort(() => Math.random() - 0.5)
+    const updates: Record<string, unknown> = {}
+    handCards.forEach((card, i) => {
+      round.cards[card.cardId] = { ...card, order: shuffled[i] }
+      updates[`cards.${card.cardId}.order`] = shuffled[i]
+    })
+    updateDoc(ref, { ...updates, _updatedBy: sessionId, updatedAt: serverTimestamp() }).catch(console.error)
+  }
+
   const DISSOLVE_GROUP_ZONES = new Set<ZoneId>(['discard', 'banish', 'hand', 'main_deck', 'runes_deck'])
 
   // Remove a card from any group it belongs to (as parent or child)
@@ -1053,6 +1070,7 @@ export const useGameStore = defineStore('game', () => {
     setShowdown,
     clearShowdown,
     shuffleDeck,
+    shuffleHand,
     endTurn,
     isMyTurn,
   }

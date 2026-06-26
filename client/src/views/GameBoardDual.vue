@@ -6,6 +6,7 @@ import CardView from '@/components/game/CardView.vue'
 import ZoneView from '@/components/game/ZoneView.vue'
 import TokenCreationPanel from '@/components/game/TokenCreationPanel.vue'
 import DeckContextMenu from '@/components/game/DeckContextMenu.vue'
+import HandContextMenu from '@/components/game/HandContextMenu.vue'
 import VisionTray from '@/components/game/VisionTray.vue'
 import RevealBanner from '@/components/game/RevealBanner.vue'
 import ShowdownPanel from '@/components/game/ShowdownPanel.vue'
@@ -621,6 +622,39 @@ function onCloseShowdown(sd: ShowdownData) {
   store.clearShowdown(sd.bfOwnerId)
 }
 
+// ── Hand actions ───────────────────────────────────────────────────────────────
+
+const handMenuVisible = ref(false)
+const handMenuX = ref(0)
+const handMenuY = ref(0)
+
+function openHandMenu(e: MouseEvent) {
+  handMenuX.value = e.clientX
+  handMenuY.value = e.clientY
+  handMenuVisible.value = true
+}
+
+function revealHand() {
+  const uid = store.myUid
+  if (!uid) return
+  for (const card of allCards.value.filter(c => c.ownerId === uid && c.zoneId === 'hand')) {
+    store.applyAction({ type: 'REVEAL_CARD', playerId: uid, cardId: card.cardId })
+  }
+}
+
+function hideHand() {
+  const uid = store.myUid
+  if (!uid) return
+  for (const card of allCards.value.filter(c => c.ownerId === uid && c.zoneId === 'hand')) {
+    store.applyAction({ type: 'REVEAL_CARD_FOR_SELF', playerId: uid, cardId: card.cardId })
+  }
+}
+
+function shuffleMyHand() {
+  const uid = store.myUid
+  if (!uid) return
+  store.shuffleHand(uid)
+}
 
 // ── Player colors ─────────────────────────────────────────────────────────────
 
@@ -769,6 +803,25 @@ function bleedRect(rect: Rect): Rect {
           </div>
 
         </template>
+
+        <!-- Hand action trigger button (full-width top of my hand zone) -->
+        <div
+          v-if="zones[`${store.myUid}_hand`]"
+          class="zone-overlay"
+          style="pointer-events: none"
+          :style="{
+            left:   zones[`${store.myUid}_hand`].x + 'px',
+            top:    zones[`${store.myUid}_hand`].y + 'px',
+            width:  zones[`${store.myUid}_hand`].w + 'px',
+            height: zones[`${store.myUid}_hand`].h + 'px',
+          }"
+        >
+          <button class="hand-menu-trigger" style="pointer-events: auto" @click="openHandMenu">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="19" r="1.5" fill="currentColor"/></svg>
+            Main
+          </button>
+        </div>
+
       </div>
 
       <!-- Cards layer (z:3) -->
@@ -825,6 +878,17 @@ function bleedRect(rect: Rect): Rect {
           />
         </template>
       </svg>
+
+      <!-- Hand context menu -->
+      <HandContextMenu
+        :visible="handMenuVisible"
+        :x="handMenuX"
+        :y="handMenuY"
+        @close="handMenuVisible = false"
+        @reveal-all="revealHand"
+        @hide-self="hideHand"
+        @shuffle="shuffleMyHand"
+      />
 
       <!-- Deck context menu -->
       <DeckContextMenu
@@ -1161,6 +1225,39 @@ function bleedRect(rect: Rect): Rect {
   background: rgba(200, 170, 110, 0.15);
   border-color: #C8AA6E;
   color: #F2E5CD;
+}
+
+/* Hand menu trigger button (top-right of hand zone) */
+.hand-menu-trigger {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  height: 22px;
+  background: linear-gradient(160deg, #0d1c2e 0%, #060d1a 100%);
+  border: 1px solid rgba(200, 170, 110, 0.22);
+  border-radius: 0;
+  color: rgba(200, 170, 110, 0.6);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-family: inherit;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  opacity: 0.7;
+  transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.hand-menu-trigger:hover {
+  opacity: 1;
+  background: linear-gradient(160deg, #0f2236 0%, #081020 100%);
+  color: #C8AA6E;
+  border-color: rgba(200, 170, 110, 0.45);
 }
 
 </style>
