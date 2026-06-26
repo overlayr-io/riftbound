@@ -76,8 +76,8 @@ onUnmounted(() => document.removeEventListener('keydown', onKey))
 <style scoped>
 .emote-panel {
   position: fixed;
-  z-index: 200;
-  left: v-bind(gridLeft);
+  z-index: 9000;
+  left: calc(v-bind(gridLeft) + 8px);
   bottom: 4rem;
 }
 
