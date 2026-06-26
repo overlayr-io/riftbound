@@ -118,13 +118,12 @@ function onKeyDown(e: KeyboardEvent) {
     // Default to my battlefield_owner zone
     const myId = store.myUid
     if (!myId) return
-    const zoneKey = `${myId}_battlefield_owner`
+    const zoneKey = `${myId}_base`
     const rect = zones.value[zoneKey]
     if (rect) {
-      openTokenPanel('battlefield_owner', rect.x + rect.w / 2, rect.y + rect.h / 2)
+      openTokenPanel('base', rect.x + rect.w / 2, rect.y + rect.h / 2)
     } else {
-      // fallback: center of screen
-      openTokenPanel('battlefield_owner', window.innerWidth / 2, window.innerHeight / 2)
+      openTokenPanel('base', window.innerWidth / 2, window.innerHeight / 2)
     }
   }
 }
@@ -570,7 +569,7 @@ function panelPos(rect: Rect): { x: number; y: number } {
   return { x: rect.x + rect.w * 0.62 + 16, y: rect.y + rect.h / 2 }
 }
 
-// Auto-create showdown when I move cards to opponent's BF (I = attacker, I go first)
+// Auto-create showdown when I attack opponent's BF (I = attacker)
 watch(
   () => {
     const myId = store.myUid
@@ -582,13 +581,39 @@ watch(
     const myId = store.myUid
     const oppId = store.opponents[0]
     if (!myId || !oppId || count === 0) return
-    if (store.currentRound?.showdowns?.[oppId]) return  // already exists
+    if (store.currentRound?.showdowns?.[oppId]) return
 
     store.writeLog(`${store.actorName(myId)} attaque le battlefield`, myId)
     store.setShowdown(oppId, {
       bfOwnerId: oppId,
       attackerId: myId,
-      currentTurnId: myId,   // attacker has focus first
+      currentTurnId: myId,
+      passCount: 0,
+      ended: false,
+      startedAt: Date.now(),
+    })
+  },
+)
+
+// Auto-create showdown when opponent attacks MY BF (I = defender / BF owner)
+watch(
+  () => {
+    const myId = store.myUid
+    const oppId = store.opponents[0]
+    if (!myId || !oppId) return 0
+    return zoneCounts.value[`${oppId}_battlefield_opponent`] ?? 0
+  },
+  (count) => {
+    const myId = store.myUid
+    const oppId = store.opponents[0]
+    if (!myId || !oppId || count === 0) return
+    if (store.currentRound?.showdowns?.[myId]) return
+
+    store.writeLog(`${store.actorName(oppId)} attaque le battlefield`, oppId)
+    store.setShowdown(myId, {
+      bfOwnerId: myId,
+      attackerId: oppId,
+      currentTurnId: oppId,
       passCount: 0,
       ended: false,
       startedAt: Date.now(),
