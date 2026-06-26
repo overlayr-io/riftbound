@@ -10,7 +10,7 @@ defineProps<{ zoom: ZoomState | null }>()
       <div
         v-if="zoom"
         class="card-zoom-popup"
-        :style="{ left: zoom.x + 'px', top: zoom.y + 'px' }"
+        :style="{ left: zoom.x + 'px', top: zoom.y + 'px', width: zoom.w + 'px', height: zoom.h + 'px' }"
       >
         <img :src="zoom.imageUrl" alt="" class="card-zoom-popup__img" />
       </div>
@@ -22,8 +22,6 @@ defineProps<{ zoom: ZoomState | null }>()
 .card-zoom-popup {
   position: fixed;
   z-index: 9500;
-  width: 210px;
-  height: 294px;
   pointer-events: none;
   border-radius: 6px;
   overflow: hidden;
