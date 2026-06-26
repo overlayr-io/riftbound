@@ -965,12 +965,11 @@ function bleedRect(rect: Rect): Rect {
             @click="banishTrayOpen = true"
           />
 
-          <!-- Showdown creation button for battlefield_owner -->
+          <!-- Showdown creation button for battlefield_owner (positioned like ShowdownPanel) -->
           <div
             v-if="canCreateShowdown(String(key)) && rect.w > 0"
-            class="zone-overlay"
-            style="pointer-events: none"
-            :style="{ left: rect.x + 'px', top: rect.y + 'px', width: rect.w + 'px', height: rect.h + 'px' }"
+            style="position: fixed; pointer-events: none;"
+            :style="{ left: (rect.x + rect.w * 0.62 + 16) + 'px', top: (rect.y + rect.h / 2) + 'px' }"
           >
             <button
               class="showdown-create-btn"
@@ -1379,9 +1378,9 @@ function bleedRect(rect: Rect): Rect {
 
 .showdown-create-btn {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  top: 0;
+  left: 0;
+  transform: translateY(-50%);
   padding: 4px 10px;
   border-radius: 5px;
   background: rgba(239, 83, 80, 0.15);

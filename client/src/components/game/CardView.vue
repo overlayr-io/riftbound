@@ -37,6 +37,7 @@ const isDropInvalid = computed(() =>
   drag?.hoveredZoneValid.value === false,
 )
 const isHovered = ref(false)
+const isPointerDown = ref(false)
 const isPinged = computed(() => pingArrow?.pinggedCardIds.value.has(props.card.cardId) ?? false)
 const isArrowTarget = computed(() =>
   pingArrow?.arrowGroups.value.some(g => g.targetCardIds.includes(props.card.cardId)) ?? false
@@ -135,8 +136,13 @@ function toggleExhausted() {
   actions?.applyAction({ type: 'TOGGLE_EXHAUSTED', playerId: props.card.controllerId, cardId: props.card.cardId })
 }
 
+function onPointerUp() {
+  isPointerDown.value = false
+}
+
 function onPointerDown(e: PointerEvent) {
   if (e.button !== 0) return
+  isPointerDown.value = true
   hideZoom()
 
   if (isArrowMode.value) {
@@ -255,9 +261,11 @@ function onContextMenu(e: MouseEvent) {
     }"
     :style="style"
     @pointerdown="onPointerDown"
+    @pointerup="onPointerUp"
+    @pointercancel="onPointerUp"
     @click="onClick"
     @contextmenu="onContextMenu"
-    @pointerenter="(e) => { isHovered = true; if (canSeeFront && card.description.imageUrl) showZoom(card.description.imageUrl, e.currentTarget as Element) }"
+    @pointerenter="(e) => { isHovered = true; if (!isPointerDown.value && canSeeFront && card.description.imageUrl) showZoom(card.description.imageUrl, e.currentTarget as Element) }"
     @pointerleave="() => { isHovered = false; hideZoom() }"
   >
     <div class="card-inner" :style="innerStyle">
