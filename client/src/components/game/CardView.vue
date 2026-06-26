@@ -289,9 +289,9 @@ function onContextMenu(e: MouseEvent) {
       <img :src="runeIcon" width="22" height="22" alt="" class="rune-action-img" />
     </button>
 
-    <!-- Rune: recycle + token (top-right, seulement si non-exhausted) -->
+    <!-- Rune: recycle + token (top-right, seulement si non-exhausted et non-token) -->
     <button
-      v-if="isRuneInPlay && isHovered && !isBeingDragged && !card.state.exhausted"
+      v-if="isRuneInPlay && !card.isToken && isHovered && !isBeingDragged && !card.state.exhausted"
       class="rune-action-btn rune-action-btn--right"
       title="Recycler et créer un token"
       @click.stop="onRecycleAndToken"

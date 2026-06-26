@@ -504,7 +504,7 @@ const ZONE_DISPLAY: Record<string, string> = {
   base: 'Base', runes: 'Runes', battlefield: 'Champ de bataille', stack: 'Stack',
 }
 
-const LABELED_ZONES = new Set(['runes_deck', 'legend', 'champion', 'main_deck', 'discard', 'banish', 'battlefield_owner', 'battlefield_opponent', 'base', 'runes'])
+const LABELED_ZONES = new Set(['hand', 'runes_deck', 'legend', 'champion', 'main_deck', 'discard', 'banish', 'battlefield_owner', 'battlefield_opponent', 'base', 'runes'])
 
 function zoneLabel(key: string): string {
   const { zone } = parseZoneKey(key)
@@ -523,7 +523,7 @@ const DECK_ZONES = new Set(['runes_deck', 'main_deck', 'discard', 'banish'])
 
 function labelSide(key: string): 'top' | 'bottom' {
   const { owner, zone } = parseZoneKey(key)
-  if (DECK_ZONES.has(zone)) {
+  if (DECK_ZONES.has(zone) || zone === 'hand') {
     return owner === store.myUid ? 'top' : 'bottom'
   }
   return 'bottom'
