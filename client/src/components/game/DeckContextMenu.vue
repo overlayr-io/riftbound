@@ -15,6 +15,11 @@ const emit = defineEmits<{
   draw: [count: number]
 }>()
 
+// ── Flyout (position: fixed, coordonnées viewport) ────────────────────────────
+
+const activeFlyout = ref<'vision' | 'reveal' | 'draw' | null>(null)
+const flyoutStyle = ref<Record<string, string>>({})
+
 // ── Menu position adjustment ──────────────────────────────────────────────────
 
 const menuRef = ref<HTMLElement | null>(null)
@@ -45,11 +50,6 @@ const menuStyle = computed(() => ({
   left: adjustedX.value + 'px',
   top: adjustedY.value + 'px',
 }))
-
-// ── Flyout (position: fixed, coordonnées viewport) ────────────────────────────
-
-const activeFlyout = ref<'vision' | 'reveal' | 'draw' | null>(null)
-const flyoutStyle = ref<Record<string, string>>({})
 
 const FLYOUT_MAX: Record<string, number> = { vision: 5, reveal: 2, draw: 4 }
 
