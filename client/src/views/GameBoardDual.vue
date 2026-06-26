@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import { computed, provide, ref, watch, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import GameSidebarDual from '@/components/game/GameSidebarDual.vue'
 import GamePresenceOverlay from '@/components/game/GamePresenceOverlay.vue'
 import CardView from '@/components/game/CardView.vue'
@@ -35,12 +36,18 @@ const absentOpponent = computed(() => {
   const opp = store.opponents[0]
   if (!opp) return null
   const name = store.playerNames[opp]?.name ?? opp.slice(0, 6)
-  // Voluntary quit takes priority over connection status
-  if (store.leftPlayers.includes(opp)) return { name, status: 'gone' as const }
+  // RTDB presence takes priority: if online, no overlay regardless of leftPlayers
   const s = statusOf(opp)
-  if (s !== 'online') return { name, status: s }
-  return null
+  if (s === 'online') return null
+  if (store.leftPlayers.includes(opp)) return { name, status: 'gone' as const }
+  return { name, status: s }
 })
+
+const router = useRouter()
+async function handleOpponentQuit() {
+  await store.leaveVoluntarily()
+  router.push('/')
+}
 
 // ── Ping & Arrows ─────────────────────────────────────────────────────────────
 
@@ -977,6 +984,7 @@ function bleedRect(rect: Rect): Rect {
         v-if="absentOpponent"
         :player-name="absentOpponent.name"
         :status="absentOpponent.status"
+        @quit="handleOpponentQuit"
       />
 
       <!-- Arrow mode confirm button (z:10) -->

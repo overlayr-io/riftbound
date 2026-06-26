@@ -19,7 +19,7 @@ const emit = defineEmits<{ cancel: []; confirm: [] }>()
           </div>
 
           <h2 class="quit-title">Quitter la partie ?</h2>
-          <p class="quit-sub">Tu seras déconnecté et redirigé vers l'accueil. La partie continuera sans toi.</p>
+          <p class="quit-sub">Si tu quittes, la partie sera terminée pour ton adversaire.</p>
 
           <div class="quit-actions">
             <button class="quit-btn quit-btn--cancel" @click="emit('cancel')">

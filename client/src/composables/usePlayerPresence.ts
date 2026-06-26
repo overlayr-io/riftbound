@@ -9,6 +9,14 @@ import {
 } from 'firebase/database'
 import { rtdb } from '@/firebase'
 
+// Re-register presence whenever the RTDB connection is (re)established
+function onRtdbConnected(cb: () => void): Unsubscribe {
+  const connRef = rtdbRef(rtdb, '.info/connected')
+  return onValue(connRef, snap => {
+    if (snap.val() === true) cb()
+  })
+}
+
 export interface PlayerPresence {
   online: boolean
   lastSeen: number
@@ -23,6 +31,7 @@ export function usePlayerPresence(
 ) {
   const presences = ref<Record<string, PlayerPresence>>({})
   let unsub: Unsubscribe | null = null
+  let unsubConnected: Unsubscribe | null = null
 
   function subscribe(gId: string) {
     unsub?.()
@@ -43,9 +52,12 @@ export function usePlayerPresence(
   const stopWatch = watch(
     [gameId, myUid],
     ([gId, uid]) => {
+      unsubConnected?.()
+      unsubConnected = null
       if (gId && uid) {
         subscribe(gId)
-        registerMyPresence(gId, uid)
+        // Re-register on every (re)connection so the opponent sees us come back online
+        unsubConnected = onRtdbConnected(() => registerMyPresence(gId, uid))
       } else {
         unsub?.()
         unsub = null
@@ -57,6 +69,7 @@ export function usePlayerPresence(
   onUnmounted(() => {
     stopWatch()
     unsub?.()
+    unsubConnected?.()
   })
 
   // Status per player: 'online' | 'disconnected' (offline but < 60s) | 'gone' (offline > 60s)

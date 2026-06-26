@@ -5,6 +5,8 @@ defineProps<{
   playerName: string
   status: PresenceStatus
 }>()
+
+const emit = defineEmits<{ quit: [] }>()
 </script>
 
 <template>
@@ -38,6 +40,10 @@ defineProps<{
           <p v-if="status === 'disconnected'" class="presence-hint">
             La partie est en pause. En attente de reconnexion.
           </p>
+
+          <button v-if="status === 'gone'" class="presence-quit-btn" @click="emit('quit')">
+            Quitter la partie
+          </button>
         </div>
       </div>
     </Transition>
@@ -134,6 +140,23 @@ defineProps<{
   0%, 100% { opacity: 0; }
   50%       { opacity: 1; }
 }
+
+.presence-quit-btn {
+  margin-top: 0.5rem;
+  padding: 0.55rem 1.5rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  border-radius: 2px;
+  background: rgba(200, 60, 60, 0.15);
+  color: #e06060;
+  border: 1px solid rgba(200, 60, 60, 0.4);
+  transition: background 0.15s, filter 0.15s;
+}
+.presence-quit-btn:hover { background: rgba(200, 60, 60, 0.28); filter: brightness(1.1); }
+.presence-quit-btn:active { transform: scale(0.97); }
 
 .presence-enter-from, .presence-leave-to  { opacity: 0; transform: scale(0.97); }
 .presence-enter-active, .presence-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
