@@ -23,6 +23,8 @@ import { useGamePingArrow, PING_ARROW_KEY } from '@/composables/useGamePingArrow
 import { useDeckVision } from '@/composables/useDeckVision'
 import type { Rect } from '@/types/card.type'
 import type { CardState, CardType, GameAction, ShowdownData, ZoneId } from '@riftbound/shared'
+import baronPitImg from '@/assets/img/baron_pit.webp'
+import brushImg from '@/assets/img/brush.webp'
 
 const store = useGameStore()
 const { width: vw, height: vh } = useViewport()
@@ -180,6 +182,48 @@ const allCards = computed<readonly CardState[]>(() =>
 )
 
 const { zones, layouts, playersZone } = useLayout(allCards)
+
+// ── Ivern Brush ───────────────────────────────────────────────────────────────
+
+const hasIvernLegend = computed(() => {
+  const myId = store.myUid
+  return allCards.value.some(c => c.ownerId === myId && c.zoneId === 'legend' && c.description.name === 'Ivern, Green Father')
+})
+
+// Tokens Brush présents dans les zones battlefield (un par joueur max)
+const brushTokens = computed(() =>
+  allCards.value.filter(c => c.isToken && c.zoneId === 'battlefield' && c.description.name === 'Brush')
+)
+// Pour l'overlay de suppression par clic droit (garde le premier trouvé pour la compatibilité du menu)
+const brushToken = computed(() => brushTokens.value[0] ?? null)
+
+const brushDeleteMenuX = ref(0)
+const brushDeleteMenuY = ref(0)
+const brushDeleteMenuOpen = ref(false)
+const brushDeleteTargetId = ref<string | null>(null)
+
+function onBattlefieldCardClick(targetOwnerId: string) {
+  if (!hasIvernLegend.value) return
+  const existing = allCards.value.find(c => c.isToken && c.ownerId === targetOwnerId && c.zoneId === 'battlefield' && c.description.name === 'Brush')
+  if (existing) {
+    store.destroyToken(existing.cardId)
+  } else {
+    store.createToken('Brush', 'battlefield', brushImg, 'battlefield', false, targetOwnerId)
+  }
+}
+
+function onBrushTokenContextMenu(e: MouseEvent, cardId: string) {
+  brushDeleteMenuX.value = e.clientX
+  brushDeleteMenuY.value = e.clientY
+  brushDeleteTargetId.value = cardId
+  brushDeleteMenuOpen.value = true
+}
+
+function deleteBrushToken() {
+  if (brushDeleteTargetId.value) store.destroyToken(brushDeleteTargetId.value)
+  brushDeleteMenuOpen.value = false
+  brushDeleteTargetId.value = null
+}
 
 // ── Drag ──────────────────────────────────────────────────────────────────────
 
@@ -506,10 +550,12 @@ const ZONE_DISPLAY: Record<string, string> = {
   base: 'Base', runes: 'Runes', battlefield: 'Champ de bataille', stack: 'Stack',
 }
 
-const LABELED_ZONES = new Set(['hand', 'runes_deck', 'legend', 'champion', 'main_deck', 'discard', 'banish', 'battlefield_owner', 'battlefield_opponent', 'base', 'runes'])
+const LABELED_ZONES = new Set(['hand', 'runes_deck', 'legend', 'champion', 'main_deck', 'discard', 'banish', 'battlefield_owner', 'battlefield_opponent', 'base', 'runes', 'baron_nashor_owner', 'baron_nashor_opponent'])
 
 function zoneLabel(key: string): string {
   const { zone } = parseZoneKey(key)
+  if (zone === 'baron_nashor_owner') return 'Baron Nashor'
+  if (zone === 'baron_nashor_opponent') return 'Attaquants'
   if (zone === 'battlefield_owner') return 'Mon battlefield'
   if (zone === 'battlefield_opponent') {
     const oppId = store.opponents[0]
@@ -622,6 +668,104 @@ watch(
     store.setShowdown(myId, {
       bfOwnerId: myId,
       attackerId: oppId,
+      currentTurnId: oppId,
+      passCount: 0,
+      ended: false,
+      startedAt: Date.now(),
+    })
+  },
+)
+
+// When Baron Nashor enters base, create a Baron Pit battlefield token in baron_nashor zone
+watch(
+  () => allCards.value.filter(c => c.description.name === 'Baron Nashor' && c.zoneId === 'base'),
+  (baronCards) => {
+    const myId = store.myUid
+    for (const card of baronCards) {
+      if (card.ownerId !== myId) continue  // only the owner creates the token
+      const exists = allCards.value.some(c => c.isToken && c.zoneId === 'baron_nashor' && c.description.name === 'Baron Pit')
+      if (exists) continue
+      store.createToken('Baron Pit', 'battlefield', baronPitImg, 'baron_nashor', false)
+    }
+  },
+  { deep: false },
+)
+
+// Auto-create showdown when cards enter baron_nashor_opponent
+// currentTurnId = whoever moved cards there first
+watch(
+  () => {
+    const myId = store.myUid
+    const oppId = store.opponents[0]
+    if (!myId || !oppId) return { myCount: 0, oppCount: 0 }
+    return {
+      myCount: allCards.value.filter(c => c.ownerId === myId && c.zoneId === 'baron_nashor_opponent').length,
+      oppCount: allCards.value.filter(c => c.ownerId === oppId && c.zoneId === 'baron_nashor_opponent').length,
+    }
+  },
+  ({ myCount, oppCount }) => {
+    if (myCount === 0 && oppCount === 0) return
+    if (store.currentRound?.showdowns?.['baron_nashor']) return
+    const myId = store.myUid
+    const oppId = store.opponents[0]
+    if (!myId || !oppId) return
+    const firstMover = myCount > 0 ? myId : oppId
+    store.writeLog('Showdown au Baron Nashor', myId)
+    store.setShowdown('baron_nashor', {
+      bfOwnerId: 'baron_nashor',
+      attackerId: firstMover === myId ? myId : oppId,
+      currentTurnId: firstMover,
+      passCount: 0,
+      ended: false,
+      startedAt: Date.now(),
+    })
+  },
+)
+
+// Auto-create showdown when I defend my own BF (cards in my battlefield_owner)
+watch(
+  () => {
+    const myId = store.myUid
+    const oppId = store.opponents[0]
+    if (!myId || !oppId) return 0
+    return zoneCounts.value[`${myId}_battlefield_owner`] ?? 0
+  },
+  (count) => {
+    const myId = store.myUid
+    const oppId = store.opponents[0]
+    if (!myId || !oppId || count === 0) return
+    if (store.currentRound?.showdowns?.[myId]) return
+
+    store.writeLog(`${store.actorName(myId)} défend le battlefield`, myId)
+    store.setShowdown(myId, {
+      bfOwnerId: myId,
+      attackerId: oppId,
+      currentTurnId: myId,
+      passCount: 0,
+      ended: false,
+      startedAt: Date.now(),
+    })
+  },
+)
+
+// Auto-create showdown when opponent defends their own BF (cards in their battlefield_owner)
+watch(
+  () => {
+    const myId = store.myUid
+    const oppId = store.opponents[0]
+    if (!myId || !oppId) return 0
+    return zoneCounts.value[`${oppId}_battlefield_owner`] ?? 0
+  },
+  (count) => {
+    const myId = store.myUid
+    const oppId = store.opponents[0]
+    if (!myId || !oppId || count === 0) return
+    if (store.currentRound?.showdowns?.[oppId]) return
+
+    store.writeLog(`${store.actorName(oppId)} défend le battlefield`, oppId)
+    store.setShowdown(oppId, {
+      bfOwnerId: oppId,
+      attackerId: myId,
       currentTurnId: oppId,
       passCount: 0,
       ended: false,
@@ -867,6 +1011,7 @@ function bleedRect(rect: Rect): Rect {
             </div>
           </div>
 
+
           <!-- Click overlay for drawable zones (above cards) -->
           <div
             v-if="isClickableZone(String(key)) && rect.w > 0"
@@ -1020,6 +1165,47 @@ function bleedRect(rect: Rect): Rect {
         @hide-self="hideHand"
         @shuffle="shuffleMyHand"
       />
+
+      <!-- Ivern: clic sur la carte battlefield (locale ou adverse) → remplace par Brush -->
+      <template v-if="hasIvernLegend">
+        <div
+          v-for="pid in store.playerIds"
+          :key="'ivern-bf-' + pid"
+          v-show="zones[`${pid}_battlefield`]?.w > 0"
+          class="battlefield-ivern-click"
+          :style="{
+            left:   (zones[`${pid}_battlefield`]?.x ?? 0) + 'px',
+            top:    (zones[`${pid}_battlefield`]?.y ?? 0) + 'px',
+            width:  (zones[`${pid}_battlefield`]?.w ?? 0) + 'px',
+            height: (zones[`${pid}_battlefield`]?.h ?? 0) + 'px',
+          }"
+          @click="onBattlefieldCardClick(pid)"
+        />
+      </template>
+
+      <!-- Brush tokens: clic droit de n'importe quel joueur → supprimer -->
+      <template v-for="bt in brushTokens" :key="'brush-ctx-' + bt.cardId">
+        <div
+          v-if="layouts.get(bt.cardId)"
+          class="brush-ctx-overlay"
+          :style="{
+            left:   layouts.get(bt.cardId)!.x + 'px',
+            top:    layouts.get(bt.cardId)!.y + 'px',
+            width:  layouts.get(bt.cardId)!.w + 'px',
+            height: layouts.get(bt.cardId)!.h + 'px',
+          }"
+          @contextmenu.prevent="onBrushTokenContextMenu($event, bt.cardId)"
+        />
+      </template>
+      <div
+        v-if="brushDeleteMenuOpen"
+        class="bf-context-menu"
+        :style="{ left: brushDeleteMenuX + 'px', top: brushDeleteMenuY + 'px' }"
+        @click.stop
+      >
+        <button @click="deleteBrushToken">Supprimer Brush</button>
+      </div>
+      <div v-if="brushDeleteMenuOpen" class="context-dismiss" @click="brushDeleteMenuOpen = false" @contextmenu.prevent="brushDeleteMenuOpen = false" />
 
       <!-- Deck context menu -->
       <DeckContextMenu
@@ -1336,6 +1522,57 @@ function bleedRect(rect: Rect): Rect {
   cursor: pointer;
   border-radius: 4px;
   transition: background 0.15s, color 0.15s;
+}
+
+.battlefield-bg {
+  position: fixed;
+  z-index: 2;
+  background-size: cover;
+  background-position: center;
+  pointer-events: none;
+  border-radius: 8px;
+}
+
+.battlefield-ivern-click {
+  position: fixed;
+  z-index: 10;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.brush-ctx-overlay {
+  position: fixed;
+  z-index: 10;
+  cursor: context-menu;
+}
+
+.bf-context-menu {
+  position: fixed;
+  z-index: 100;
+  background: #1a2a3a;
+  border: 1px solid #4a6a8a;
+  border-radius: 6px;
+  padding: 4px;
+}
+
+.bf-context-menu button {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  color: #e0e8f0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.bf-context-menu button:hover { background: #2a3a4a; }
+
+.context-dismiss {
+  position: fixed;
+  z-index: 99;
+  inset: 0;
 }
 
 .arrow-cancel-btn:hover {

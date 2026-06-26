@@ -562,12 +562,13 @@ export const useGameStore = defineStore('game', () => {
     }).catch(console.error)
   }
 
-  function createToken(name: string, cardType: CardType, imageUrl: string, zoneId: ZoneId, exhausted = true) {
+  function createToken(name: string, cardType: CardType, imageUrl: string, zoneId: ZoneId, exhausted = true, overrideOwnerId?: string) {
     const round = currentRound.value
     const ref = roundRef()
     const uid = myUid.value
     if (!round || !ref || !uid) return
 
+    const effectiveOwner = overrideOwnerId ?? uid
     const cardId = `token_${uid}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
     const zoneCards = Object.values(round.cards).filter(c => c.zoneId === zoneId)
     const order = Math.max(-1, ...zoneCards.map(c => c.order)) + 1
@@ -576,8 +577,8 @@ export const useGameStore = defineStore('game', () => {
       cardId,
       baseCardId: 'token',
       description: { name, type: cardType, imageUrl },
-      ownerId: uid,
-      controllerId: uid,
+      ownerId: effectiveOwner,
+      controllerId: effectiveOwner,
       zoneId,
       order,
       state: {

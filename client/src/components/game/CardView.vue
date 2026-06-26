@@ -188,7 +188,7 @@ function onClick() {
 // ── Context menu ──────────────────────────────────────────────────────────────
 
 const RUNE_ZONES = new Set(['runes', 'runes_deck'])
-const OPPONENT_CTX_ZONES = new Set(['base', 'battlefield', 'battlefield_owner', 'battlefield_opponent'])
+const OPPONENT_CTX_ZONES = new Set(['base', 'battlefield_owner', 'battlefield_opponent'])
 
 const isRuneInPlay = computed(() =>
   props.card.zoneId === 'runes' &&
@@ -239,6 +239,7 @@ function onContextMenu(e: MouseEvent) {
     return
   }
   if (RUNE_ZONES.has(props.card.zoneId)) return
+  if (props.card.zoneId === 'battlefield') return
   e.preventDefault()
   ctxX.value = e.clientX
   ctxY.value = e.clientY
@@ -269,7 +270,7 @@ function onContextMenu(e: MouseEvent) {
     <div class="card-inner" :style="innerStyle">
       <img
         class="card-face card-front object-contain w-full h-full"
-        :class="{'card-battlefield': card.zoneId === 'battlefield'}"
+        :class="{'card-battlefield': ['battlefield', 'baron_nashor', 'brush'].includes(card.zoneId)}"
         :src="card.description.imageUrl || cardBack"
         :alt="card.description.name"
       >
@@ -403,7 +404,7 @@ function onContextMenu(e: MouseEvent) {
 }
 
 .card-battlefield {
-  box-shadow: none
+  box-shadow: none !important;
 }
 
 .card-back {

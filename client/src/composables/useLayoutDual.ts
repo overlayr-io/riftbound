@@ -248,7 +248,37 @@ export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
       }
     }
 
-    const bfCount = 2
+    const cardList = toValue(cards)
+    // Zone persists once activated (Baron Nashor in base triggers it; Baron Pit token keeps it alive)
+    const hasBaronNashor = cardList.some(
+      c => (c.description.name === 'Baron Nashor' && c.zoneId === 'base')
+        || (c.isToken && c.description.name === 'Baron Pit')
+    )
+
+    const emitNeutralBF = (x: number, w: number) => {
+      result['baron_nashor:battlefield'] = { x, y: ybf, w, h: bfH }
+      // Center zone — where the Baron Pit token card appears (same area as the card indicator)
+      result['baron_nashor'] = {
+        x: x + (w - bfCardH) / 2,
+        y: ybf + (bfH - bfCardW) / 2,
+        w: bfCardH,
+        h: bfCardW,
+      }
+      result['baron_nashor_owner'] = {
+        x: x + GAP,
+        y: ybf + bfH - cardSlot.h - INSIDE_MARGIN,
+        w: w - 2 * GAP,
+        h: cardSlot.h,
+      }
+      result['baron_nashor_opponent'] = {
+        x: x + GAP,
+        y: ybf + INSIDE_MARGIN,
+        w: w - 2 * GAP,
+        h: cardSlot.h,
+      }
+    }
+
+    const bfCount = hasBaronNashor ? 3 : 2
     const bfW = (W.value - OUTSIDE_MARGIN - LEFT_X - bfCount * GAP - STACK.w) / bfCount
 
     const zoneRowFill = W.value - OUTSIDE_MARGIN - LEFT_X - 2 * cardSlot.w - 3 * GAP
@@ -280,8 +310,11 @@ export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
     emitPlayerRows(opponent,     top, v => v)
     emitPlayerRows(local ?? '', top, mirror)
 
-    emitBF(local ?? '', opponent,    LEFT_X,                  bfW, true)
-    emitBF(opponent,    local ?? '', LEFT_X + bfW + GAP,     bfW, false)
+    emitBF(local ?? '', opponent, LEFT_X, bfW, true)
+    if (hasBaronNashor) {
+      emitNeutralBF(LEFT_X + bfW + GAP, bfW)
+    }
+    emitBF(opponent, local ?? '', LEFT_X + (hasBaronNashor ? 2 : 1) * (bfW + GAP), bfW, false)
 
     result['stack'] = { x: W.value - OUTSIDE_MARGIN - STACK.w, y: ybf, w: STACK.w, h: bfH }
 
@@ -340,11 +373,14 @@ export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
           layoutSingle(rect, list, out)
           break
         case 'battlefield':
-          layoutBattlefield(rect, list, out)
+        case 'baron_nashor':
+          layoutStackable(rect, list, out)
           break
         case 'battlefield_opponent':
         case 'battlefield_owner':
         case 'base':
+        case 'baron_nashor_owner':
+        case 'baron_nashor_opponent':
           layoutRow(rect, list, out)
           break
         case 'runes':

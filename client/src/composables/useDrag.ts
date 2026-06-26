@@ -21,6 +21,8 @@ function isValidDrop(card: CardState, zoneKey: string): boolean {
   if (card.description.type === 'rune' && !RUNE_ZONES.has(zone)) return false
   if (card.description.type !== 'rune' && RUNE_ZONES.has(zone)) return false
   if (OWNER_FREE_ZONES.has(zone)) return true
+  // Baron Nashor zones are free for all players (no owner restriction)
+  if (zoneKey.startsWith('baron_nashor')) return true
   // battlefield_owner / battlefield_opponent: prefix is always the card owner's id
   // (emitBF uses attackerId for battlefield_opponent, so owner === card.ownerId holds for both)
   return owner === card.ownerId
