@@ -54,6 +54,16 @@ const canSeeFront = computed(() => {
   return props.card.controllerId === props.currentPlayerId
 })
 
+const canSeeZoom = computed(() => {
+  const v = props.card.state.visibleTo
+  if (v === 'ALL') return true
+  if (v === 'NOBODY') {
+    if(isOwned.value) return true
+    return false
+  }
+  return props.card.controllerId === props.currentPlayerId
+})
+
 const innerStyle = computed(() => ({
   transform: canSeeFront.value ? 'rotateY(0deg)' : 'rotateY(180deg)',
 }))
@@ -264,7 +274,7 @@ function onContextMenu(e: MouseEvent) {
     @pointercancel="onPointerUp"
     @click="onClick"
     @contextmenu="onContextMenu"
-    @pointerenter="(e) => { isHovered = true; if (!isPointerDown && canSeeFront && card.description.imageUrl) showZoom(card.description.imageUrl, e.currentTarget as Element, card.description.type) }"
+    @pointerenter="(e) => { isHovered = true; if (!isPointerDown && canSeeZoom && card.description.imageUrl) showZoom(card.description.imageUrl, e.currentTarget as Element, card.description.type) }"
     @pointerleave="() => { isHovered = false; hideZoom() }"
   >
     <div class="card-inner" :style="innerStyle">
