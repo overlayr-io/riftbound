@@ -215,7 +215,11 @@ const oppCtxY = ref(0)
 function onRecycleRune(e: MouseEvent) {
   e.preventDefault()
   e.stopPropagation()
-  actions?.applyAction({ type: 'DESTROY_TOKEN', playerId: props.card.controllerId, cardId: props.card.cardId })
+  if(props.card.isToken) {
+    actions?.applyAction({ type: 'DESTROY_TOKEN', playerId: props.card.controllerId, cardId: props.card.cardId })
+  } else {
+    actions?.applyAction({ type: 'RECYCLE_RUNE', playerId: props.card.controllerId, cardId: props.card.cardId })
+  }
 }
 
 function onRecycleAndToken(e: MouseEvent) {
