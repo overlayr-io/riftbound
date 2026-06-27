@@ -459,7 +459,6 @@ function onTrayRecycleAll() {
   for (const cardId of [...trayCardIds.value]) {
     store.sendToDeck(cardId, zone as ZoneId, 'bottom', trayMode.value === 'vision')
   }
-  store.shuffleDeck(zone as ZoneId)
   const uid = store.myUid ?? ''
   store.writeLog(`${store.actorName(uid)} a recyclé ${trayCardIds.value.length} carte(s) en dessous de son deck et a mélangé`, uid)
   trayCardIds.value = []
