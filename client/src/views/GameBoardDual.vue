@@ -13,17 +13,16 @@ import VisionTray from '@/components/game/VisionTray.vue'
 import ZoneTray from '@/components/game/ZoneTray.vue'
 import type { ZoneTrayAction } from '@/components/game/ZoneTray.vue'
 import RevealBanner from '@/components/game/RevealBanner.vue'
-import ShowdownPanel from '@/components/game/ShowdownPanel.vue'
 import { useGameStore } from '@/stores/game'
 import { usePlayerPresence } from '@/composables/usePlayerPresence'
-import { useLayout, SEPARATOR } from '@/composables/useLayout'
+import { useLayout } from '@/composables/useLayout'
 import { useViewport } from '@/composables/useViewport'
 import { useDrag, DRAG_KEY, GAME_ACTIONS_KEY } from '@/composables/useDrag'
 import { useBoardShortcuts } from '@/composables/useBoardShortcuts'
 import { useGamePingArrow, PING_ARROW_KEY } from '@/composables/useGamePingArrow'
 import { useDeckVision } from '@/composables/useDeckVision'
 import type { Rect } from '@/types/card.type'
-import type { CardState, CardType, GameAction, ShowdownData, ZoneId } from '@riftbound/shared'
+import type { CardState, CardType, GameAction, ZoneId } from '@riftbound/shared'
 import baronPitImg from '@/assets/img/baron_pit.webp'
 import brushImg from '@/assets/img/brush.webp'
 
@@ -651,90 +650,6 @@ const runeStats = computed(() => {
 
 const stackCount = computed(() => allCards.value.filter(c => c.zoneId === 'stack').length)
 
-// ── Showdown panels ────────────────────────────────────────────────────────────
-// Stored in Firestore → both players see the same state in real-time.
-// Auto-created when I move cards onto the opponent's battlefield (I'm the attacker).
-
-// Local flag: bfOwnerIds where conquer was just clicked — prevents watcher from
-// immediately re-creating a showdown while attack cards are still on the zone.
-// Plain Set (not ref) — watchers read it synchronously, no Vue reactivity needed.
-const conqueredBfOwnerIds = new Set<string>()
-
-const showdownPanels = computed(() => {
-  const myId = store.myUid
-  const oppId = store.opponents[0]
-  if (!myId || !oppId) return []
-
-  return Object.entries(store.currentRound?.showdowns ?? {})
-    .map(([bfOwnerId, sd]) => {
-      const rect = zones.value[`${bfOwnerId}${SEPARATOR}battlefield`]
-      if (!rect) return null
-      const oppIdInSd = sd.attackerId === myId ? sd.bfOwnerId : sd.attackerId
-      return { bfOwnerId, rect, sd, opponentName: store.actorName(oppIdInSd) }
-    })
-    .filter((p): p is NonNullable<typeof p> => p !== null)
-})
-
-function panelPos(rect: Rect): { x: number; y: number } {
-  return { x: rect.x + rect.w * 0.62 + 16, y: rect.y + rect.h / 2 }
-}
-
-// Auto-create showdown when I attack opponent's BF (I = attacker)
-watch(
-  () => {
-    const myId = store.myUid
-    const oppId = store.opponents[0]
-    if (!myId || !oppId) return 0
-    return zoneCounts.value[`${myId}_battlefield_opponent`] ?? 0
-  },
-  (count) => {
-    const myId = store.myUid
-    const oppId = store.opponents[0]
-    if (!myId || !oppId) return
-    if (count === 0) { conqueredBfOwnerIds.delete(oppId); return }
-    if (conqueredBfOwnerIds.has(oppId)) return
-    if (store.currentRound?.showdowns?.[oppId]) return
-
-    store.writeLog(`${store.actorName(myId)} attaque le battlefield`, myId)
-    store.setShowdown(oppId, {
-      bfOwnerId: oppId,
-      attackerId: myId,
-      currentTurnId: myId,
-      passCount: 0,
-      ended: false,
-      startedAt: Date.now(),
-    })
-  },
-)
-
-// Auto-create showdown when opponent attacks MY BF (I = defender / BF owner)
-watch(
-  () => {
-    const myId = store.myUid
-    const oppId = store.opponents[0]
-    if (!myId || !oppId) return 0
-    return zoneCounts.value[`${oppId}_battlefield_opponent`] ?? 0
-  },
-  (count) => {
-    const myId = store.myUid
-    const oppId = store.opponents[0]
-    if (!myId || !oppId) return
-    if (count === 0) { conqueredBfOwnerIds.delete(myId); return }
-    if (conqueredBfOwnerIds.has(myId)) return
-    if (store.currentRound?.showdowns?.[myId]) return
-
-    store.writeLog(`${store.actorName(oppId)} attaque le battlefield`, oppId)
-    store.setShowdown(myId, {
-      bfOwnerId: myId,
-      attackerId: oppId,
-      currentTurnId: oppId,
-      passCount: 0,
-      ended: false,
-      startedAt: Date.now(),
-    })
-  },
-)
-
 // When Baron Nashor enters base, create a Baron Pit battlefield token in baron_nashor zone
 watch(
   () => allCards.value.filter(c => c.description.name === 'Baron Nashor' && c.zoneId === 'base'),
@@ -749,120 +664,6 @@ watch(
   },
   { deep: false },
 )
-
-// Auto-create showdown when cards enter baron_nashor_opponent
-// currentTurnId = whoever moved cards there first
-watch(
-  () => {
-    const myId = store.myUid
-    const oppId = store.opponents[0]
-    if (!myId || !oppId) return { myCount: 0, oppCount: 0 }
-    return {
-      myCount: allCards.value.filter(c => c.ownerId === myId && c.zoneId === 'baron_nashor_opponent').length,
-      oppCount: allCards.value.filter(c => c.ownerId === oppId && c.zoneId === 'baron_nashor_opponent').length,
-    }
-  },
-  ({ myCount, oppCount }) => {
-    if (myCount === 0 && oppCount === 0) return
-    if (store.currentRound?.showdowns?.['baron_nashor']) return
-    const myId = store.myUid
-    const oppId = store.opponents[0]
-    if (!myId || !oppId) return
-    const firstMover = myCount > 0 ? myId : oppId
-    store.writeLog('Showdown au Baron Nashor', myId)
-    store.setShowdown('baron_nashor', {
-      bfOwnerId: 'baron_nashor',
-      attackerId: firstMover === myId ? myId : oppId,
-      currentTurnId: firstMover,
-      passCount: 0,
-      ended: false,
-      startedAt: Date.now(),
-    })
-  },
-)
-
-// Auto-create showdown when I defend my own BF (cards in my battlefield_owner)
-watch(
-  () => {
-    const myId = store.myUid
-    const oppId = store.opponents[0]
-    if (!myId || !oppId) return 0
-    return zoneCounts.value[`${myId}_battlefield_owner`] ?? 0
-  },
-  (count) => {
-    const myId = store.myUid
-    const oppId = store.opponents[0]
-    if (!myId || !oppId) return
-    if (count === 0) { conqueredBfOwnerIds.delete(myId); return }
-    if (conqueredBfOwnerIds.has(myId)) return
-    if (store.currentRound?.showdowns?.[myId]) return
-
-    store.writeLog(`${store.actorName(myId)} défend le battlefield`, myId)
-    store.setShowdown(myId, {
-      bfOwnerId: myId,
-      attackerId: oppId,
-      currentTurnId: myId,
-      passCount: 0,
-      ended: false,
-      startedAt: Date.now(),
-    })
-  },
-)
-
-// Auto-create showdown when opponent defends their own BF (cards in their battlefield_owner)
-watch(
-  () => {
-    const myId = store.myUid
-    const oppId = store.opponents[0]
-    if (!myId || !oppId) return 0
-    return zoneCounts.value[`${oppId}_battlefield_owner`] ?? 0
-  },
-  (count) => {
-    const myId = store.myUid
-    const oppId = store.opponents[0]
-    if (!myId || !oppId) return
-    if (count === 0) { conqueredBfOwnerIds.delete(oppId); return }
-    if (conqueredBfOwnerIds.has(oppId)) return
-    if (store.currentRound?.showdowns?.[oppId]) return
-
-    store.writeLog(`${store.actorName(oppId)} défend le battlefield`, oppId)
-    store.setShowdown(oppId, {
-      bfOwnerId: oppId,
-      attackerId: myId,
-      currentTurnId: oppId,
-      passCount: 0,
-      ended: false,
-      startedAt: Date.now(),
-    })
-  },
-)
-
-function onPass(sd: ShowdownData) {
-  const myId = store.myUid ?? ''
-  const opponent = sd.currentTurnId === sd.attackerId ? sd.bfOwnerId : sd.attackerId
-  const nextPass = sd.passCount + 1
-
-  store.writeLog(`${store.actorName(myId)} passe`, myId)
-
-  if (nextPass >= 2) {
-    store.writeLog('Showdown terminé', null)
-    store.setShowdown(sd.bfOwnerId, { ...sd, passCount: 2, ended: true })
-  } else {
-    store.setShowdown(sd.bfOwnerId, { ...sd, passCount: nextPass, currentTurnId: opponent })
-  }
-}
-
-function onConquer(sd: ShowdownData) {
-  const myId = store.myUid ?? ''
-  conqueredBfOwnerIds.add(sd.bfOwnerId)
-  store.setScore(myId, (store.myState?.score ?? 0) + 1)
-  store.writeLog(`${store.actorName(myId)} conquiert le battlefield et marque 1 point`, myId)
-  store.clearShowdown(sd.bfOwnerId)
-}
-
-function onCloseShowdown(sd: ShowdownData) {
-  store.clearShowdown(sd.bfOwnerId)
-}
 
 // ── Discard tray ──────────────────────────────────────────────────────────────
 
@@ -1351,20 +1152,6 @@ function bleedRect(rect: Rect): Rect {
         :anchor-x="revealAnchor.x"
         :anchor-y="revealAnchor.y"
         @done="dismissReveal"
-      />
-
-      <!-- Showdown panels (synced via Firestore, auto-created on move) -->
-      <ShowdownPanel
-        v-for="panel in showdownPanels"
-        :key="'sd-' + panel.bfOwnerId"
-        :showdown="panel.sd"
-        :my-id="store.myUid ?? ''"
-        :opponent-name="panel.opponentName"
-        :x="panelPos(panel.rect).x"
-        :y="panelPos(panel.rect).y"
-        @pass="onPass(panel.sd)"
-        @conquer="onConquer(panel.sd)"
-        @close="onCloseShowdown(panel.sd)"
       />
 
       <!-- Discard tray -->
