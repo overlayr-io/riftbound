@@ -1075,6 +1075,11 @@ export const useGameStore = defineStore('game', () => {
         updates[`cards.${id}.loanedFromId`]         = deleteField()
         updates[`cards.${id}.loanedUntilEndOfTurn`] = deleteField()
       }
+
+      if(card.controllerId === uid && card.isToken && card.description.type === 'rune') {
+        delete round.cards[id]
+        updates[`cards.${id}`] = deleteField()
+      }
     }
 
     round.currentTurn = { playerId: nextId, turn: nextNum }
