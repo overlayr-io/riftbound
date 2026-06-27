@@ -1655,8 +1655,8 @@ function bleedRect(rect: Rect): Rect {
   transform: translateX(-50%);
   padding: 10px 20px;
   border: 1px solid rgba(200, 170, 110, 0.5);
-  background: rgba(200, 170, 110, 0.08);
-  color: #C8AA6E;
+  background: rgb(200 170 110 / 0.72);
+  color: #ffffff;
   font-size: 0.7rem;
   font-weight: 900;
   letter-spacing: 0.2em;
@@ -1664,10 +1664,11 @@ function bleedRect(rect: Rect): Rect {
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
+  width: 80%;
 }
 
 .resolve-btn:hover {
-  background: rgba(200, 170, 110, 0.15);
+  background: rgb(200 170 110 / 0.48);
   border-color: #C8AA6E;
   color: #F2E5CD;
 }
