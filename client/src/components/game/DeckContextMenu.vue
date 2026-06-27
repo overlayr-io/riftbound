@@ -15,10 +15,22 @@ const emit = defineEmits<{
   draw: [count: number]
 }>()
 
-// ── Flyout (position: fixed, coordonnées viewport) ────────────────────────────
+const activeSubmenu = ref<'vision' | 'reveal' | 'draw' | null>(null)
 
-const activeFlyout = ref<'vision' | 'reveal' | 'draw' | null>(null)
-const flyoutStyle = ref<Record<string, string>>({})
+let closeTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleClose() {
+  closeTimer = setTimeout(() => {
+    activeSubmenu.value = null
+  }, 150)
+}
+
+function cancelClose() {
+  if (closeTimer) {
+    clearTimeout(closeTimer)
+    closeTimer = null
+  }
+}
 
 // ── Menu position adjustment ──────────────────────────────────────────────────
 
@@ -27,23 +39,26 @@ const adjustedX = ref(props.x)
 const adjustedY = ref(props.y)
 
 watch(
-  () => [props.visible, props.x, props.y] as const,
-  async ([visible, x, y]) => {
-    if (!visible) { activeFlyout.value = null; return }
-    adjustedX.value = x
-    adjustedY.value = y
-    await nextTick()
-    const el = menuRef.value
-    if (!el) return
-    const { width, height } = el.getBoundingClientRect()
-    const vw = window.innerWidth
-    const vh = window.innerHeight
-    if (x + width > vw) adjustedX.value = vw - width - 8
-    if (y + height > vh) adjustedY.value = vh - height - 8
-    if (adjustedX.value < 8) adjustedX.value = 8
-    if (adjustedY.value < 8) adjustedY.value = 8
-  },
-  { immediate: true },
+    () => [props.visible, props.x, props.y] as const,
+    async ([visible, x, y]) => {
+      if (!visible) {
+        activeSubmenu.value = null
+        return
+      }
+      adjustedX.value = x
+      adjustedY.value = y
+      await nextTick()
+      const el = menuRef.value
+      if (!el) return
+      const { width, height } = el.getBoundingClientRect()
+      const vw = window.innerWidth
+      const vh = window.innerHeight
+      if (x + width > vw) adjustedX.value = vw - width - 8
+      if (y + height > vh) adjustedY.value = vh - height - 8
+      if (adjustedX.value < 8) adjustedX.value = 8
+      if (adjustedY.value < 8) adjustedY.value = 8
+    },
+    { immediate: true },
 )
 
 const menuStyle = computed(() => ({
@@ -56,45 +71,6 @@ const FLYOUT_MAX: Record<string, number> = { vision: 5, reveal: 2, draw: 4 }
 function flyoutCounts(action: 'vision' | 'reveal' | 'draw'): number[] {
   const max = Math.min(FLYOUT_MAX[action], props.deckCount)
   return Array.from({ length: max }, (_, i) => i + 1)
-}
-
-async function openFlyout(e: MouseEvent, action: 'vision' | 'reveal' | 'draw') {
-  e.preventDefault()
-  e.stopPropagation()
-  if (activeFlyout.value === action) { activeFlyout.value = null; return }
-  activeFlyout.value = action
-  await nextTick()
-
-  const flyoutEl = document.querySelector('.ctx-flyout-fixed') as HTMLElement | null
-  if (!flyoutEl) return
-  const menuEl = menuRef.value
-  if (!menuEl) return
-
-  const menuRect = menuEl.getBoundingClientRect()
-  const fw = flyoutEl.offsetWidth || 210
-  const fh = flyoutEl.offsetHeight || 90
-  const vw = window.innerWidth
-  const vh = window.innerHeight
-
-  // Horizontal: à droite du menu si possible, sinon à gauche
-  const spaceRight = vw - menuRect.right - 8
-  const left = spaceRight >= fw
-    ? menuRect.right + 4
-    : menuRect.left - fw - 4
-
-  // Vertical: aligner avec le haut de la row cliquée, clamper
-  const rowEl = (e.currentTarget as HTMLElement).closest('.ctx-row') as HTMLElement
-  const rowRect = rowEl?.getBoundingClientRect() ?? menuRect
-  let top = rowRect.top
-  if (top + fh > vh - 8) top = vh - 8 - fh
-  if (top < 8) top = 8
-
-  flyoutStyle.value = {
-    position: 'fixed',
-    left: left + 'px',
-    top: top + 'px',
-    zIndex: '9500',
-  }
 }
 
 function onAction(action: 'vision' | 'reveal' | 'draw', count: number) {
@@ -117,84 +93,82 @@ function onOverlay(e: MouseEvent) {
         <div class="ctx-header">Deck ({{ deckCount }} cartes)</div>
         <div class="ctx-header-sep" />
 
-        <!-- Vision / Predict -->
-        <div class="ctx-row" :class="{ 'ctx-row--active': activeFlyout === 'vision' }">
-          <div class="ctx-main" @click="onAction('vision', 1)">
-            <span class="ctx-icon">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
-            </span>
-            <span class="ctx-label">Vision / Predict</span>
-          </div>
-          <button class="ctx-arrow-btn" @click="openFlyout($event, 'vision')">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <div
+            class="ctx-item ctx-item--arrow"
+            @mouseenter="cancelClose(); activeSubmenu = 'vision'"
+        >
+          <span class="ctx-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </span>
+
+          <span class="ctx-label" @click.stop="onAction('vision', 1)">Vision / Predict</span>
+
+          <div class="ctx-arrow-zone" @click.stop="activeSubmenu = activeSubmenu === 'vision' ? null : 'vision'">
+            <svg class="ctx-arrow-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <polyline points="9 18 15 12 9 6"/>
             </svg>
-          </button>
+          </div>
+
+          <div v-if="activeSubmenu === 'vision'" class="ctx-submenu" @mouseenter="cancelClose" @mouseleave="scheduleClose">
+            <div class="ctx-submenu-title">VISION / PREDICT</div>
+            <div v-for="n in flyoutCounts('vision')" :key="n" class="ctx-item" @click.stop="onAction('vision', n)">
+              {{ n }} carte{{ n > 1 ? 's' : '' }}
+            </div>
+          </div>
         </div>
 
-        <div class="ctx-sep" />
+        <div class="ctx-item ctx-item--arrow" @mouseenter="cancelClose(); activeSubmenu = 'reveal'">
+          <span class="ctx-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
+              <line x1="1" y1="1" x2="23" y2="23"/>
+            </svg>
+          </span>
 
-        <!-- Révéler -->
-        <div class="ctx-row" :class="{ 'ctx-row--active': activeFlyout === 'reveal' }">
-          <div class="ctx-main" @click="onAction('reveal', 1)">
-            <span class="ctx-icon">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
-                <line x1="1" y1="1" x2="23" y2="23"/>
-              </svg>
-            </span>
-            <span class="ctx-label">Révéler</span>
-          </div>
-          <button class="ctx-arrow-btn" @click="openFlyout($event, 'reveal')">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <span class="ctx-label" @click.stop="onAction('reveal', 1)">Révéler</span>
+
+          <div class="ctx-arrow-zone" @click.stop="activeSubmenu = activeSubmenu === 'reveal' ? null : 'reveal'">
+            <svg class="ctx-arrow-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <polyline points="9 18 15 12 9 6"/>
             </svg>
-          </button>
+          </div>
+
+          <div v-if="activeSubmenu === 'reveal'" class="ctx-submenu" @mouseenter="cancelClose" @mouseleave="scheduleClose">
+            <div class="ctx-submenu-title">REVELER</div>
+            <div v-for="n in flyoutCounts('reveal')" :key="n" class="ctx-item" @click.stop="onAction('reveal', n)">
+              {{ n }} carte{{ n > 1 ? 's' : '' }}
+            </div>
+          </div>
         </div>
 
-        <div class="ctx-sep" />
+        <div class="ctx-item ctx-item--arrow" @mouseenter="cancelClose(); activeSubmenu = 'draw'">
+          <span class="ctx-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <polyline points="8 17 12 21 16 17"/>
+              <line x1="12" y1="3" x2="12" y2="21"/>
+            </svg>
+          </span>
 
-        <!-- Piocher -->
-        <div class="ctx-row" :class="{ 'ctx-row--active': activeFlyout === 'draw' }">
-          <div class="ctx-main" @click="onAction('draw', 1)">
-            <span class="ctx-icon">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                <polyline points="8 17 12 21 16 17"/>
-                <line x1="12" y1="3" x2="12" y2="21"/>
-              </svg>
-            </span>
-            <span class="ctx-label">Piocher</span>
-          </div>
-          <button class="ctx-arrow-btn" @click="openFlyout($event, 'draw')">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <span class="ctx-label" @click.stop="onAction('draw', 1)">Piocher</span>
+
+          <div class="ctx-arrow-zone" @click.stop="activeSubmenu = activeSubmenu === 'draw' ? null : 'draw'">
+            <svg class="ctx-arrow-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <polyline points="9 18 15 12 9 6"/>
             </svg>
-          </button>
+          </div>
+
+          <div v-if="activeSubmenu === 'draw'" class="ctx-submenu" @mouseenter="cancelClose" @mouseleave="scheduleClose">
+            <div class="ctx-submenu-title">PIOCHER</div>
+            <div v-for="n in flyoutCounts('draw')" :key="n" class="ctx-item" @click.stop="onAction('draw', n)">
+              {{ n }} carte{{ n > 1 ? 's' : '' }}
+            </div>
+          </div>
         </div>
 
       </div>
-
-      <!-- Flyout en position fixed pour rester dans le viewport -->
-      <Teleport to="body">
-        <div v-if="activeFlyout" class="ctx-flyout-fixed" :style="flyoutStyle">
-          <div class="ctx-flyout-title">
-            {{ activeFlyout === 'vision' ? 'VISION' : activeFlyout === 'reveal' ? 'RÉVÉLER' : 'PIOCHER' }}
-            — NOMBRE DE CARTES
-          </div>
-          <div class="ctx-flyout-pills">
-            <button
-              v-for="n in flyoutCounts(activeFlyout)"
-              :key="n"
-              class="ctx-pill"
-              @click.stop="onAction(activeFlyout!, n)"
-            >{{ n }}</button>
-          </div>
-        </div>
-      </Teleport>
-
     </div>
   </Teleport>
 </template>
@@ -238,33 +212,6 @@ function onOverlay(e: MouseEvent) {
   margin: 4px 0;
 }
 
-.ctx-row {
-  display: flex;
-  align-items: stretch;
-  transition: background 0.1s;
-}
-
-.ctx-row:hover,
-.ctx-row--active {
-  background: rgba(200, 170, 110, 0.06);
-}
-
-.ctx-main {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px 7px 12px;
-  flex: 1;
-  cursor: pointer;
-  color: #c8d8e0;
-  font-size: 11px;
-  transition: color 0.1s;
-}
-
-.ctx-main:hover {
-  color: #F2E5CD;
-}
-
 .ctx-icon {
   display: flex;
   align-items: center;
@@ -279,68 +226,60 @@ function onOverlay(e: MouseEvent) {
   flex: 1;
 }
 
-.ctx-arrow-btn {
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  color: #c8d8e0;
+  font-size: 11px;
+  position: relative;
+  transition: background 0.1s, color 0.1s;
+}
+
+.ctx-item:hover {
+  background: rgba(200, 170, 110, 0.08);
+  color: #F2E5CD;
+}
+
+.ctx-item--arrow {
+  padding-right: 0;
+}
+
+.ctx-arrow-zone {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 28px;
-  background: transparent;
-  border: none;
+  align-self: stretch;
   border-left: 1px solid rgba(200, 170, 110, 0.14);
-  cursor: pointer;
-  color: rgba(200, 170, 110, 0.4);
-  padding: 0;
-  transition: background 0.1s, color 0.1s;
 }
 
-.ctx-arrow-btn:hover {
-  background: rgba(200, 170, 110, 0.10);
-  color: #C8AA6E;
+.ctx-arrow-icon {
+  color: rgba(200, 170, 110, 0.45);
 }
 
-/* Flyout — rendu dans un second Teleport, position: fixed dans le script */
-.ctx-flyout-fixed {
-  min-width: 210px;
-  padding: 6px 0 10px;
+.ctx-submenu {
+  position: absolute;
+  right: calc(100% + 4px);
+  bottom: -4px;
+  min-width: 180px;
+  padding: 4px 0;
   background: linear-gradient(160deg, #0e2030 0%, #060d1a 100%);
   border: 1px solid rgba(200, 170, 110, 0.32);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(0, 0, 0, 0.4);
+  z-index: 10;
 }
 
-.ctx-flyout-title {
-  padding: 5px 12px 8px;
+.ctx-submenu-title {
+  padding: 5px 12px 6px;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.1em;
   color: #C8AA6E;
   text-transform: uppercase;
   border-bottom: 1px solid rgba(200, 170, 110, 0.12);
-  margin-bottom: 8px;
-}
-
-.ctx-flyout-pills {
-  display: flex;
-  gap: 6px;
-  padding: 0 12px;
-  flex-wrap: wrap;
-}
-
-.ctx-pill {
-  width: 32px;
-  height: 28px;
-  border-radius: 3px;
-  border: 1px solid rgba(200, 170, 110, 0.25);
-  background: rgba(200, 170, 110, 0.08);
-  color: #C8AA6E;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  font-family: inherit;
-  transition: background 0.1s, border-color 0.1s;
-}
-
-.ctx-pill:hover {
-  background: rgba(200, 170, 110, 0.22);
-  border-color: rgba(200, 170, 110, 0.5);
+  margin-bottom: 2px;
 }
 </style>
