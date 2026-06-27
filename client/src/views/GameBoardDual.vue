@@ -1458,15 +1458,15 @@ function bleedRect(rect: Rect): Rect {
 /* Card count badge */
 .zone-count {
   position: absolute;
-  width: 18px;
-  height: 18px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.25);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 700;
   color: rgba(255, 255, 255, 0.8);
   pointer-events: none;
