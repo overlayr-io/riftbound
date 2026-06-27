@@ -7,6 +7,7 @@ import CardView from '@/components/game/CardView.vue'
 import ZoneView from '@/components/game/ZoneView.vue'
 import TokenCreationPanel from '@/components/game/TokenCreationPanel.vue'
 import DeckContextMenu from '@/components/game/DeckContextMenu.vue'
+import RunesDeckContextMenu from '@/components/game/RunesDeckContextMenu.vue'
 import HandContextMenu from '@/components/game/HandContextMenu.vue'
 import VisionTray from '@/components/game/VisionTray.vue'
 import ZoneTray from '@/components/game/ZoneTray.vue'
@@ -288,6 +289,11 @@ function isDeckZone(key: string): boolean {
   return !!owner && owner === store.myUid && zone === 'main_deck'
 }
 
+function isRunesDeckZone(key: string): boolean {
+  const { owner, zone } = parseZoneKey(key)
+  return !!owner && owner === store.myUid && zone === 'runes_deck'
+}
+
 // Anti-cheat halo: an opponent is currently looking at the top of this deck.
 function visionOnZone(key: string): { name: string; count: number } | null {
   const { owner, zone } = parseZoneKey(key)
@@ -315,6 +321,36 @@ function onDeckContextMenu(e: MouseEvent, key: string) {
   deckMenuX.value = e.clientX
   deckMenuY.value = e.clientY
   deckMenuVisible.value = true
+}
+
+// ── Runes deck context menu ───────────────────────────────────────────────────
+
+const runesDeckMenuVisible = ref(false)
+const runesDeckMenuX = ref(0)
+const runesDeckMenuY = ref(0)
+const runesDeckMenuKey = ref<string | null>(null)
+
+function onRunesDeckContextMenu(e: MouseEvent, key: string) {
+  if (!isRunesDeckZone(key)) return
+  e.preventDefault()
+  runesDeckMenuKey.value = key
+  runesDeckMenuX.value = e.clientX
+  runesDeckMenuY.value = e.clientY
+  runesDeckMenuVisible.value = true
+}
+
+function onRunesDeckDrawRunes(count: number) {
+  const key = runesDeckMenuKey.value
+  if (!key) return
+  const { owner } = parseZoneKey(key)
+  const sorted = deckCardsSorted(key)
+  const bottom = sorted.slice(-count).reverse()
+  const uid = owner ?? ''
+  const who = store.actorName(uid)
+  for (const card of bottom) {
+    store.applyAction({ type: 'CHANNEL_CARD', playerId: uid, cardId: card.cardId })
+  }
+  store.writeLog(`${who} a pioché ${bottom.length} rune${bottom.length > 1 ? 's' : ''} en dessous de son deck de runes`, uid)
 }
 
 // ── Vision / Reveal tray ──────────────────────────────────────────────────────
@@ -365,7 +401,7 @@ function openTray(count: number, mode: 'vision' | 'reveal') {
 function onDeckVision(count: number) { openTray(count, 'vision') }
 function onDeckReveal(count: number) { openTray(count, 'reveal') }
 
-function onTrayAction(cardId: string, action: 'top' | 'bottom' | 'hand' | 'reveal' | 'discard') {
+function onTrayAction(cardId: string, action: 'top' | 'bottom' | 'hand' | 'reveal' | 'discard' | 'stack') {
   const uid = store.myUid ?? ''
   const who = store.actorName(uid)
   switch (action) {
@@ -393,10 +429,15 @@ function onTrayAction(cardId: string, action: 'top' | 'bottom' | 'hand' | 'revea
     case 'discard':
       store.applyAction({ type: 'DISCARD_CARD', playerId: uid, cardId, fromZoneId: 'main_deck' })
       break
+    case 'stack':
+      store.applyAction({ type: 'MOVE_CARD', playerId: uid, cardId, fromZoneId: 'main_deck', toZoneId: 'stack' })
+      break
   }
-  // Remove the handled card from the tray; close when empty.
-  trayCardIds.value = trayCardIds.value.filter(id => id !== cardId)
-  if (!trayCardIds.value.length) closeTray()
+  // For 'reveal', the card stays in the tray so the player can also send it to hand afterwards.
+  if (action !== 'reveal') {
+    trayCardIds.value = trayCardIds.value.filter(id => id !== cardId)
+    if (!trayCardIds.value.length) closeTray()
+  }
 }
 
 function trayRevealedIds(): string[] {
@@ -472,6 +513,16 @@ function onDeckDraw(count: number) {
   const { owner, zone } = parseZoneKey(key)
   const top = deckCardsSorted(key).slice(0, count)
   for (const card of top) {
+    store.applyAction({ type: 'DRAW_CARD', playerId: owner ?? '', cardId: card.cardId, fromZoneId: zone as ZoneId })
+  }
+}
+
+function onDeckDrawBottom(count: number) {
+  const key = deckMenuKey.value
+  if (!key) return
+  const { owner, zone } = parseZoneKey(key)
+  const bottom = deckCardsSorted(key).slice(-count).reverse()
+  for (const card of bottom) {
     store.applyAction({ type: 'DRAW_CARD', playerId: owner ?? '', cardId: card.cardId, fromZoneId: zone as ZoneId })
   }
 }
@@ -878,6 +929,10 @@ function onDiscardTrayAction(cardId: string, action: ZoneTrayAction) {
       store.applyAction({ type: 'BANISH_CARD', playerId: uid, cardId, fromZoneId: 'discard' })
       store.writeLog(`${who} a banni une carte depuis la défausse`, uid)
       break
+    case 'stack':
+      store.applyAction({ type: 'MOVE_CARD', playerId: uid, cardId, fromZoneId: 'discard', toZoneId: 'stack' })
+      store.writeLog(`${who} a mis une carte sur le stack depuis la défausse`, uid)
+      break
   }
 }
 
@@ -900,6 +955,10 @@ function onBanishTrayAction(cardId: string, action: ZoneTrayAction) {
     case 'discard':
       store.applyAction({ type: 'DISCARD_CARD', playerId: uid, cardId, fromZoneId: 'banish' })
       store.writeLog(`${who} a défaussé une carte depuis les bannis`, uid)
+      break
+    case 'stack':
+      store.applyAction({ type: 'MOVE_CARD', playerId: uid, cardId, fromZoneId: 'banish', toZoneId: 'stack' })
+      store.writeLog(`${who} a mis une carte sur le stack depuis les bannis`, uid)
       break
   }
 }
@@ -1042,7 +1101,7 @@ function bleedRect(rect: Rect): Rect {
             style="pointer-events: auto"
             :style="{ left: rect.x + 'px', top: rect.y + 'px', width: rect.w + 'px', height: rect.h + 'px' }"
             @click="onZoneClick(String(key))"
-            @contextmenu="onDeckContextMenu($event, String(key))"
+            @contextmenu="isRunesDeckZone(String(key)) ? onRunesDeckContextMenu($event, String(key)) : onDeckContextMenu($event, String(key))"
           />
 
           <!-- Résoudre button for stack zone -->
@@ -1259,6 +1318,17 @@ function bleedRect(rect: Rect): Rect {
         @vision="onDeckVision"
         @reveal="onDeckReveal"
         @draw="onDeckDraw"
+        @draw-bottom="onDeckDrawBottom"
+      />
+
+      <!-- Runes deck context menu -->
+      <RunesDeckContextMenu
+        :visible="runesDeckMenuVisible"
+        :x="runesDeckMenuX"
+        :y="runesDeckMenuY"
+        :deck-count="runesDeckMenuKey ? deckCount(runesDeckMenuKey) : 0"
+        @close="runesDeckMenuVisible = false"
+        @draw-runes="onRunesDeckDrawRunes"
       />
 
       <!-- Vision / Reveal tray (the acting player's own view) -->
@@ -1302,7 +1372,7 @@ function bleedRect(rect: Rect): Rect {
         :open="discardTrayOpen"
         :cards="discardTrayCards"
         :title="`Défausse — ${discardTrayCards.length} carte${discardTrayCards.length !== 1 ? 's' : ''}`"
-        :actions="['hand', 'top', 'bottom', 'banish']"
+        :actions="['hand', 'top', 'bottom', 'banish', 'stack']"
         @action="onDiscardTrayAction"
         @close="discardTrayOpen = false"
       />
@@ -1312,7 +1382,7 @@ function bleedRect(rect: Rect): Rect {
         :open="banishTrayOpen"
         :cards="banishTrayCards"
         :title="`Bannis — ${banishTrayCards.length} carte${banishTrayCards.length !== 1 ? 's' : ''}`"
-        :actions="['hand', 'top', 'bottom', 'discard']"
+        :actions="['hand', 'top', 'bottom', 'discard', 'stack']"
         @action="onBanishTrayAction"
         @close="banishTrayOpen = false"
       />

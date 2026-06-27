@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import type { CardState } from '@riftbound/shared'
 import cardBack from '@/assets/img/card_back.png'
 
-export type ZoneTrayAction = 'top' | 'bottom' | 'hand' | 'discard' | 'banish'
+export type ZoneTrayAction = 'top' | 'bottom' | 'hand' | 'discard' | 'banish' | 'stack'
 
 defineProps<{
   open: boolean
@@ -103,6 +103,15 @@ const ghostMode = ref(false)
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
                 Bannis
+              </button>
+              <button
+                v-if="actions.includes('stack')"
+                class="zt-btn zt-btn--icon zt-btn--stack"
+                title="Vers le stack"
+                @click="emit('action', card.cardId, 'stack')"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="7" width="20" height="4" rx="1"/><rect x="4" y="13" width="16" height="4" rx="1"/><rect x="6" y="3" width="12" height="4" rx="1"/></svg>
+                Stack
               </button>
             </div>
           </div>
@@ -298,6 +307,13 @@ const ghostMode = ref(false)
 }
 .zt-btn--banish svg { color: #b070e0; }
 .zt-btn--banish:hover { background: rgba(140, 80, 200, 0.22); }
+
+.zt-btn--stack {
+  background: rgba(110, 180, 120, 0.10);
+  border-color: rgba(110, 180, 120, 0.28);
+}
+.zt-btn--stack svg { color: #7ecb8a; }
+.zt-btn--stack:hover { background: rgba(110, 180, 120, 0.22); }
 
 .tray-slide-enter-active,
 .tray-slide-leave-active {

@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import type { CardState } from '@riftbound/shared'
 import cardBack from '@/assets/img/card_back.png'
 
-export type VisionAction = 'top' | 'bottom' | 'hand' | 'reveal' | 'discard'
+export type VisionAction = 'top' | 'bottom' | 'hand' | 'reveal' | 'discard' | 'stack'
 
 const props = defineProps<{
   open: boolean
@@ -92,6 +92,10 @@ function title() {
                   <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1" y="5" width="6" height="9" rx="1"/><rect x="6" y="3" width="6" height="9" rx="1"/></svg>
                   En main
                 </button>
+                <button class="vt-btn vt-btn--icon vt-btn--stack" title="Vers le stack" @click="emit('action', card.cardId, 'stack')">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="7" width="20" height="4" rx="1"/><rect x="4" y="13" width="16" height="4" rx="1"/><rect x="6" y="3" width="12" height="4" rx="1"/></svg>
+                  Stack
+                </button>
               </div>
             </div>
           </div>
@@ -119,16 +123,17 @@ function title() {
 .vt-tray {
   position: fixed;
   left: 50%;
-  bottom: 0;
-  transform: translateX(-50%);
+  top: 50%;
+  transform: translate(-50%, -50%);
   z-index: 9100;
   max-width: 96vw;
+  max-height: 90vh;
+  overflow-y: auto;
   padding: 12px 16px 14px;
   background: linear-gradient(160deg, #0d1c2e 0%, #060d1a 100%);
   border: 1px solid rgba(200, 170, 110, 0.28);
-  border-bottom: none;
-  border-radius: 10px 10px 0 0;
-  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.4);
+  border-radius: 10px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(0, 0, 0, 0.4);
   user-select: none;
   font-family: inherit;
 }
@@ -311,6 +316,13 @@ function title() {
 .vt-btn--discard svg { color: #e07070; }
 .vt-btn--discard:hover { background: rgba(200, 80, 80, 0.22); }
 
+.vt-btn--stack {
+  background: rgba(110, 180, 120, 0.10);
+  border-color: rgba(110, 180, 120, 0.28);
+}
+.vt-btn--stack svg { color: #7ecb8a; }
+.vt-btn--stack:hover { background: rgba(110, 180, 120, 0.22); }
+
 .vt-foot {
   margin-top: 12px;
   display: flex;
@@ -361,7 +373,7 @@ function title() {
 }
 .tray-slide-enter-from,
 .tray-slide-leave-to {
-  transform: translate(-50%, 100%);
+  transform: translate(-50%, -44%);
   opacity: 0;
 }
 </style>

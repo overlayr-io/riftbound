@@ -13,9 +13,10 @@ const emit = defineEmits<{
   vision: [count: number]
   reveal: [count: number]
   draw: [count: number]
+  'draw-bottom': [count: number]
 }>()
 
-const activeSubmenu = ref<'vision' | 'reveal' | 'draw' | null>(null)
+const activeSubmenu = ref<'vision' | 'reveal' | 'draw' | 'draw-bottom' | null>(null)
 
 let closeTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -66,16 +67,17 @@ const menuStyle = computed(() => ({
   top: adjustedY.value + 'px',
 }))
 
-const FLYOUT_MAX: Record<string, number> = { vision: 5, reveal: 2, draw: 4 }
+const FLYOUT_MAX: Record<string, number> = { vision: 5, reveal: 2, draw: 4, 'draw-bottom': 4 }
 
-function flyoutCounts(action: 'vision' | 'reveal' | 'draw'): number[] {
+function flyoutCounts(action: 'vision' | 'reveal' | 'draw' | 'draw-bottom'): number[] {
   const max = Math.min(FLYOUT_MAX[action], props.deckCount)
   return Array.from({ length: max }, (_, i) => i + 1)
 }
 
-function onAction(action: 'vision' | 'reveal' | 'draw', count: number) {
+function onAction(action: 'vision' | 'reveal' | 'draw' | 'draw-bottom', count: number) {
   if (action === 'vision') emit('vision', count)
   else if (action === 'reveal') emit('reveal', count)
+  else if (action === 'draw-bottom') emit('draw-bottom', count)
   else emit('draw', count)
   emit('close')
 }
@@ -163,6 +165,31 @@ function onOverlay(e: MouseEvent) {
           <div v-if="activeSubmenu === 'draw'" class="ctx-submenu" @mouseenter="cancelClose" @mouseleave="scheduleClose">
             <div class="ctx-submenu-title">PIOCHER</div>
             <div v-for="n in flyoutCounts('draw')" :key="n" class="ctx-item" @click.stop="onAction('draw', n)">
+              {{ n }} carte{{ n > 1 ? 's' : '' }}
+            </div>
+          </div>
+        </div>
+
+        <div class="ctx-item ctx-item--arrow" @mouseenter="cancelClose(); activeSubmenu = 'draw-bottom'">
+          <span class="ctx-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <polyline points="8 17 12 21 16 17"/>
+              <line x1="12" y1="3" x2="12" y2="21"/>
+              <line x1="5" y1="21" x2="19" y2="21"/>
+            </svg>
+          </span>
+
+          <span class="ctx-label" @click.stop="onAction('draw-bottom', 1)">Piocher en dessous</span>
+
+          <div class="ctx-arrow-zone" @click.stop="activeSubmenu = activeSubmenu === 'draw-bottom' ? null : 'draw-bottom'">
+            <svg class="ctx-arrow-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </div>
+
+          <div v-if="activeSubmenu === 'draw-bottom'" class="ctx-submenu" @mouseenter="cancelClose" @mouseleave="scheduleClose">
+            <div class="ctx-submenu-title">PIOCHER EN DESSOUS</div>
+            <div v-for="n in flyoutCounts('draw-bottom')" :key="n" class="ctx-item" @click.stop="onAction('draw-bottom', n)">
               {{ n }} carte{{ n > 1 ? 's' : '' }}
             </div>
           </div>

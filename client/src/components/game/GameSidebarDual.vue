@@ -11,6 +11,7 @@ import GameQuitConfirm from './GameQuitConfirm.vue'
 import GameEmotePanel from './GameEmotePanel.vue'
 import GameEmoteDisplay from './GameEmoteDisplay.vue'
 import GameNextRoundModal from './GameNextRoundModal.vue'
+import TurnChangeOverlay from './TurnChangeOverlay.vue'
 
 const { SIDEBAR_WIDTH } = useViewport()
 const gameStore = useGameStore()
@@ -118,6 +119,21 @@ function onKey(e: KeyboardEvent) {
 
 onMounted(() => document.addEventListener('keydown', onKey))
 onUnmounted(() => document.removeEventListener('keydown', onKey))
+
+// ── Turn change overlay ───────────────────────────────────────────────────────
+const turnOverlayVisible = ref(false)
+const turnOverlayText = ref('VOTRE TOUR')
+let turnOverlayTimer: ReturnType<typeof setTimeout> | null = null
+
+watch(isMyTurn, (newVal, oldVal) => {
+  if (oldVal === undefined) return
+  if (turnOverlayTimer) clearTimeout(turnOverlayTimer)
+  turnOverlayText.value = newVal ? 'VOTRE TOUR' : 'AU TOUR DE L\'ADVERSAIRE'
+  turnOverlayVisible.value = true
+  turnOverlayTimer = setTimeout(() => {
+    turnOverlayVisible.value = false
+  }, 2500)
+})
 </script>
 
 <template>
@@ -299,6 +315,8 @@ onUnmounted(() => document.removeEventListener('keydown', onKey))
     @cancel="showNextRound = false"
     @confirm="confirmNextRound"
   />
+
+  <TurnChangeOverlay :visible="turnOverlayVisible" :text="turnOverlayText" />
 </template>
 
 <style scoped>
