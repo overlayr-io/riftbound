@@ -61,7 +61,7 @@ const canSeeZoom = computed(() => {
   const v = props.card.state.visibleTo
   if (v === 'ALL') return true
   if (v === 'NOBODY') {
-    if(isOwned.value) return true
+    if(isOwned.value && !props.card.zoneId.endsWith('main_deck')) return true
     return false
   }
   return props.card.controllerId === props.currentPlayerId
