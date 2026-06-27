@@ -441,13 +441,13 @@ function onContextMenu(e: MouseEvent) {
 }
 
 .badge {
-  width: 18px;
-  height: 18px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 9px;
+  font-size: 14px;
   font-weight: 700;
   color: #fff;
   border: 1.5px solid rgba(0, 0, 0, 0.4);
