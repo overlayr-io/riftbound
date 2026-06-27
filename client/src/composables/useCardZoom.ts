@@ -2,8 +2,8 @@ import { ref } from 'vue'
 import type { CardType } from '@riftbound/shared'
 import { cardZoomScale } from '@/stores/settings'
 
-const BASE_W = 210
-const BASE_H = 294  // 5:7 ratio
+const BASE_W = 240
+const BASE_H = 324  // 5:7 ratio
 const GAP = 10
 
 export interface ZoomState {
