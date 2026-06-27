@@ -1005,7 +1005,6 @@ function bleedRect(rect: Rect): Rect {
       <div class="cards-layer">
         <template v-for="card in allCards" :key="card.cardId">
           <CardView
-            v-if="layouts.get(card.cardId)"
             :card="card"
             :layout="layouts.get(card.cardId)!"
             :current-player-id="store.myUid ?? ''"

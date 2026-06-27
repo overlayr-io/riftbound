@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, ref } from 'vue'
+import { computed, inject, ref, watch, onMounted } from 'vue'
 import type { CardState } from '@riftbound/shared'
 import type { CardLayout } from '@/types/card.type'
 import { DRAG_KEY, GAME_ACTIONS_KEY } from '@/composables/useDrag'
@@ -97,7 +97,6 @@ const style = computed(() => {
       zIndex: L.z,
       opacity: runeTokenOpacity.value,
       filter: stackCopyFilter.value,
-      transition: 'transform var(--ease-duration) var(--ease)',
     }
   }
 
@@ -136,6 +135,53 @@ const style = computed(() => {
     filter: baseFilter,
   }
 })
+
+// ── Movement animation (Web Animations API) ──────────────────────────────────
+// CSS `transition: transform` is unreliable here: when a card sits idle, the
+// browser recycles its composited layer (we hint `will-change: transform`), and
+// the *first* transform change after that idle period is applied without
+// replaying the transition — so a remote player who isn't interacting sees the
+// card jump instead of animate. Driving the move with `element.animate()` is
+// immune to this: it captures the start value explicitly and always plays the
+// from→to keyframes, regardless of compositor/layer state.
+
+const cardEl = ref<HTMLElement | null>(null)
+
+// Motion tokens, read from the same CSS custom properties as the rest of the UI.
+function motionTokens(): { duration: number; easing: string } {
+  const root = getComputedStyle(document.documentElement)
+  const durRaw = root.getPropertyValue('--ease-duration').trim() || '650ms'
+  const duration = durRaw.endsWith('ms') ? parseFloat(durRaw) : parseFloat(durRaw) * 1000
+  const easing = root.getPropertyValue('--ease').trim() || 'ease'
+  return { duration: Number.isFinite(duration) ? duration : 650, easing }
+}
+
+let prevTransform: string | null = null
+let moveAnim: Animation | null = null
+
+watch(
+  () => style.value.transform,
+  (next, prev) => {
+    const el = cardEl.value
+    // While dragging the card follows the pointer every frame — never animate,
+    // just keep the latest value so the post-drop settle animates from there.
+    if (!el || isBeingDragged.value || prevTransform === null || !prev || prev === next || !next) {
+      prevTransform = next ?? null
+      return
+    }
+    const from = prevTransform
+    prevTransform = next
+    moveAnim?.cancel()
+    const { duration, easing } = motionTokens()
+    moveAnim = el.animate(
+      [{ transform: from }, { transform: next }],
+      { duration, easing },
+    )
+  },
+  { flush: 'post' },
+)
+
+onMounted(() => { prevTransform = style.value.transform ?? null })
 
 // ── Interactions ─────────────────────────────────────────────────────────────
 
@@ -266,6 +312,7 @@ function onContextMenu(e: MouseEvent) {
 
 <template>
   <div
+    ref="cardEl"
     class="card"
     :class="{
       dragging: isBeingDragged,
@@ -392,11 +439,12 @@ function onContextMenu(e: MouseEvent) {
   will-change: transform;
   transform-origin: 50% 50%;
   perspective: 800px;
-  transition: transform var(--ease-duration) var(--ease);
+  /* Transform moves are animated imperatively via the Web Animations API
+     (see CardView <script>) — a CSS transition here is unreliable after the
+     card's compositor layer goes idle. */
 }
 
 .card.dragging {
-  transition: none;
   cursor: grabbing;
 }
 
