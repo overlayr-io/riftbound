@@ -8,7 +8,7 @@ import admin from 'firebase-admin'
 process.env.FIREBASE_AUTH_EMULATOR_HOST = 'localhost:9099'
 process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080'
 
-const PROJECT = 'rifbound-tcg'
+const PROJECT = 'overlayr-riftbound'
 const ADMIN_EMAIL = 'admin@overlayr.fr'
 const ADMIN_PASSWORD = 'adminoverlayr'
 const ADMIN_ROLE = 'super_admin'

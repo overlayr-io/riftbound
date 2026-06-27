@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import type { GameMode, GameDeckFormat, GameMatchFormat } from '@riftbound/shared'
 import { MAX_PLAYERS_BY_MODE } from '@riftbound/shared'
 import { useAuthStore } from '@/stores/auth'
 import { useLobbyStore } from '@/stores/lobby'
+import { useFeatureFlagsStore } from '@/stores/featureFlags'
 import { useActiveGame } from '@/composables/useActiveGame'
 import GameCard from '@/components/GameCard.vue'
 import TabBar from '@/components/TabBar.vue'
@@ -13,6 +14,8 @@ import ActionButton from '@/components/ActionButton.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const featureFlags = useFeatureFlagsStore()
+onMounted(() => featureFlags.load())
 const lobbyStore = useLobbyStore()
 const { activeGame } = useActiveGame(() => authStore.user?.uid ?? null)
 
@@ -26,11 +29,16 @@ const TABS: { id: TabId; label: string }[] = [
 const activeTab = ref<TabId>('matchmaking')
 
 // ── Game mode options ──────────────────────────────────────────────────────
-const MODES: { value: GameMode; label: string; desc: string; soon: boolean }[] = [
+const ALL_MODES: { value: GameMode; label: string; desc: string; soon: boolean }[] = [
   { value: 'dual', label: 'Duel', desc: '1 contre 1', soon: false },
-  { value: '2v2', label: '2V2', desc: 'Équipes de 2', soon: true },
+  { value: '2v2', label: '2V2', desc: 'Équipes de 2', soon: false },
   { value: 'FFA', label: 'FFA', desc: 'Chacun pour soi', soon: true },
 ]
+const MODES = computed(() =>
+  ALL_MODES
+      .filter(m => m.value !== '2v2' || featureFlags.is2v2Enabled)
+      .filter(m => m.value !== 'FFA' || featureFlags.is2v2Enabled)
+)
 
 // ── Match format options ───────────────────────────────────────────────────
 const MATCH_FORMATS: { value: GameMatchFormat; label: string; desc: string; soon: boolean }[] = [
@@ -38,7 +46,7 @@ const MATCH_FORMATS: { value: GameMatchFormat; label: string; desc: string; soon
   { value: 'BO3', label: 'BO3', desc: 'Meilleur des 3', soon: false },
   { value: 'BO5', label: 'BO5', desc: 'Meilleur des 5', soon: true },
 ]
-const matchFormat = 'BO1' as GameMatchFormat
+const matchFormat = ref<GameMatchFormat>('BO1')
 
 // ── Deck format options ────────────────────────────────────────────────────
 const DECK_FORMATS_MM: { value: GameDeckFormat | 'ANY'; label: string; desc: string; soon?: boolean }[] = [
@@ -369,6 +377,7 @@ async function confirmLeave() {
                     :active="matchFormat === f.value"
                     :disabled="f.soon || isSearching"
                     :badge="f.soon ? 'BIENTÔT' : undefined"
+                    @select="matchFormat = f.value"
                   />
                 </div>
               </div>
