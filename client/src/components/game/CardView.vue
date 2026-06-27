@@ -107,7 +107,7 @@ const style = computed(() => {
       ? 'drop-shadow(0 8px 16px rgba(255,60,60,0.5))'
       : 'drop-shadow(0 12px 24px rgba(0,0,0,0.5))'
     return {
-      transform: `translate3d(${d.x}px, ${d.y}px, 0)${rotStr(d.rotation, d.cssRotation)} scale(1.04)`,
+      transform: `translate3d(${d.x}px, ${d.y}px, 0)${rotStr(d.rotation, d.cssRotation)} scale(1.25)`,
       width: d.w + 'px',
       height: d.h + 'px',
       zIndex: 9999,
