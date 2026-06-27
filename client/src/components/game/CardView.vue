@@ -18,6 +18,7 @@ const props = defineProps<{
   card: CardState
   layout: CardLayout
   currentPlayerId: string
+  disableZoom?: boolean
 }>()
 
 const drag = inject(DRAG_KEY)
@@ -55,6 +56,7 @@ const canSeeFront = computed(() => {
 })
 
 const canSeeZoom = computed(() => {
+  if (props.disableZoom) return false
   const v = props.card.state.visibleTo
   if (v === 'ALL') return true
   if (v === 'NOBODY') {

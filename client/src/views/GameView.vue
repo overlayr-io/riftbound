@@ -162,6 +162,8 @@ const mulliganHand = ref<import('@riftbound/shared').Card[]>([])
 
 watch(setup, (step) => {
   if (step !== 'mulligan') return
+  // Auto-skip mulligan until bug is fixed — submit immediately with 0 swaps
+  if (!game.myState?.mulliganDone) game.submitMulligan(0)
   if (!game.myDeck?.mainDeck?.length) return
   mulliganHand.value = shuffleArray(game.myDeck.mainDeck).slice(0, 4)
 })

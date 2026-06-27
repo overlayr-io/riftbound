@@ -22,7 +22,8 @@ const STEPS = computed((): StepDef[] => {
   } else {
     base.push({ key: 'select_battlefield_discard', label: 'DÉFAUSSE CHAMP' })
   }
-  base.push({ key: 'mulligan', label: 'MULLIGAN' })
+  // mulligan hidden until bug is fixed
+  // base.push({ key: 'mulligan', label: 'MULLIGAN' })
   return base
 })
 

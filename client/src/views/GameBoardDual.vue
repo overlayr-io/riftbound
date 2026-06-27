@@ -194,6 +194,8 @@ const hasIvernLegend = computed(() => {
 const brushTokens = computed(() =>
   allCards.value.filter(c => c.isToken && c.zoneId === 'battlefield' && c.description.name === 'Brush')
 )
+// True when any Brush token is on the board — disables zoom for all battlefield zones
+const isBrushActive = computed(() => brushTokens.value.length > 0)
 
 const brushDeleteMenuX = ref(0)
 const brushDeleteMenuY = ref(0)
@@ -603,6 +605,11 @@ const stackCount = computed(() => allCards.value.filter(c => c.zoneId === 'stack
 // Stored in Firestore → both players see the same state in real-time.
 // Auto-created when I move cards onto the opponent's battlefield (I'm the attacker).
 
+// Local flag: bfOwnerIds where conquer was just clicked — prevents watcher from
+// immediately re-creating a showdown while attack cards are still on the zone.
+// Plain Set (not ref) — watchers read it synchronously, no Vue reactivity needed.
+const conqueredBfOwnerIds = new Set<string>()
+
 const showdownPanels = computed(() => {
   const myId = store.myUid
   const oppId = store.opponents[0]
@@ -633,7 +640,9 @@ watch(
   (count) => {
     const myId = store.myUid
     const oppId = store.opponents[0]
-    if (!myId || !oppId || count === 0) return
+    if (!myId || !oppId) return
+    if (count === 0) { conqueredBfOwnerIds.delete(oppId); return }
+    if (conqueredBfOwnerIds.has(oppId)) return
     if (store.currentRound?.showdowns?.[oppId]) return
 
     store.writeLog(`${store.actorName(myId)} attaque le battlefield`, myId)
@@ -659,7 +668,9 @@ watch(
   (count) => {
     const myId = store.myUid
     const oppId = store.opponents[0]
-    if (!myId || !oppId || count === 0) return
+    if (!myId || !oppId) return
+    if (count === 0) { conqueredBfOwnerIds.delete(myId); return }
+    if (conqueredBfOwnerIds.has(myId)) return
     if (store.currentRound?.showdowns?.[myId]) return
 
     store.writeLog(`${store.actorName(oppId)} attaque le battlefield`, oppId)
@@ -731,7 +742,9 @@ watch(
   (count) => {
     const myId = store.myUid
     const oppId = store.opponents[0]
-    if (!myId || !oppId || count === 0) return
+    if (!myId || !oppId) return
+    if (count === 0) { conqueredBfOwnerIds.delete(myId); return }
+    if (conqueredBfOwnerIds.has(myId)) return
     if (store.currentRound?.showdowns?.[myId]) return
 
     store.writeLog(`${store.actorName(myId)} défend le battlefield`, myId)
@@ -757,7 +770,9 @@ watch(
   (count) => {
     const myId = store.myUid
     const oppId = store.opponents[0]
-    if (!myId || !oppId || count === 0) return
+    if (!myId || !oppId) return
+    if (count === 0) { conqueredBfOwnerIds.delete(oppId); return }
+    if (conqueredBfOwnerIds.has(oppId)) return
     if (store.currentRound?.showdowns?.[oppId]) return
 
     store.writeLog(`${store.actorName(oppId)} défend le battlefield`, oppId)
@@ -789,6 +804,7 @@ function onPass(sd: ShowdownData) {
 
 function onConquer(sd: ShowdownData) {
   const myId = store.myUid ?? ''
+  conqueredBfOwnerIds.add(sd.bfOwnerId)
   store.setScore(myId, (store.myState?.score ?? 0) + 1)
   store.writeLog(`${store.actorName(myId)} conquiert le battlefield et marque 1 point`, myId)
   store.clearShowdown(sd.bfOwnerId)
@@ -817,6 +833,28 @@ const banishTrayCards = computed(() => {
   if (!uid) return []
   return allCards.value
     .filter(c => c.ownerId === uid && c.zoneId === 'banish')
+    .slice()
+    .sort((a, b) => b.order - a.order)
+})
+
+// Opponent read-only trays
+const oppDiscardTrayOpen = ref(false)
+const oppBanishTrayOpen = ref(false)
+
+const oppDiscardTrayCards = computed(() => {
+  const oppId = store.opponents[0]
+  if (!oppId) return []
+  return allCards.value
+    .filter(c => c.ownerId === oppId && c.zoneId === 'discard')
+    .slice()
+    .sort((a, b) => b.order - a.order)
+})
+
+const oppBanishTrayCards = computed(() => {
+  const oppId = store.opponents[0]
+  if (!oppId) return []
+  return allCards.value
+    .filter(c => c.ownerId === oppId && c.zoneId === 'banish')
     .slice()
     .sort((a, b) => b.order - a.order)
 })
@@ -875,6 +913,16 @@ function isDiscardZone(key: string): boolean {
 function isBanishZone(key: string): boolean {
   const { owner, zone } = parseZoneKey(key)
   return !!owner && owner === store.myUid && zone === 'banish'
+}
+
+function isOppDiscardZone(key: string): boolean {
+  const { owner, zone } = parseZoneKey(key)
+  return !!owner && owner === store.opponents[0] && zone === 'discard'
+}
+
+function isOppBanishZone(key: string): boolean {
+  const { owner, zone } = parseZoneKey(key)
+  return !!owner && owner === store.opponents[0] && zone === 'banish'
 }
 
 // ── Hand actions ───────────────────────────────────────────────────────────────
@@ -1037,6 +1085,24 @@ function bleedRect(rect: Rect): Rect {
             @click="banishTrayOpen = true"
           />
 
+          <!-- Click overlay for opponent discard zone (read-only tray) -->
+          <div
+            v-if="isOppDiscardZone(String(key)) && rect.w > 0"
+            class="zone-overlay zone-click-overlay"
+            style="pointer-events: auto"
+            :style="{ left: rect.x + 'px', top: rect.y + 'px', width: rect.w + 'px', height: rect.h + 'px' }"
+            @click="oppDiscardTrayOpen = true"
+          />
+
+          <!-- Click overlay for opponent banish zone (read-only tray) -->
+          <div
+            v-if="isOppBanishZone(String(key)) && rect.w > 0"
+            class="zone-overlay zone-click-overlay"
+            style="pointer-events: auto"
+            :style="{ left: rect.x + 'px', top: rect.y + 'px', width: rect.w + 'px', height: rect.h + 'px' }"
+            @click="oppBanishTrayOpen = true"
+          />
+
           <!-- Anti-cheat halo: opponent is looking at the top of their deck -->
           <div
             v-if="visionOnZone(String(key)) && rect.w > 0"
@@ -1080,6 +1146,7 @@ function bleedRect(rect: Rect): Rect {
             :card="card"
             :layout="layouts.get(card.cardId)!"
             :current-player-id="store.myUid ?? ''"
+            :disable-zoom="isBrushActive && (card.zoneId === 'battlefield_owner' || card.zoneId === 'battlefield_opponent')"
           />
         </template>
       </div>
@@ -1245,6 +1312,24 @@ function bleedRect(rect: Rect): Rect {
         :actions="['hand', 'top', 'bottom', 'discard']"
         @action="onBanishTrayAction"
         @close="banishTrayOpen = false"
+      />
+
+      <!-- Opponent discard tray (read-only) -->
+      <ZoneTray
+        :open="oppDiscardTrayOpen"
+        :cards="oppDiscardTrayCards"
+        :title="`Défausse adverse — ${oppDiscardTrayCards.length} carte${oppDiscardTrayCards.length !== 1 ? 's' : ''}`"
+        :actions="[]"
+        @close="oppDiscardTrayOpen = false"
+      />
+
+      <!-- Opponent banish tray (read-only) -->
+      <ZoneTray
+        :open="oppBanishTrayOpen"
+        :cards="oppBanishTrayCards"
+        :title="`Bannis adversaire — ${oppBanishTrayCards.length} carte${oppBanishTrayCards.length !== 1 ? 's' : ''}`"
+        :actions="[]"
+        @close="oppBanishTrayOpen = false"
       />
 
       <!-- Token creation panel -->

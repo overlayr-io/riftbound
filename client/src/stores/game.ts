@@ -1040,6 +1040,7 @@ export const useGameStore = defineStore('game', () => {
       if (turn.playerId !== uid) return
       if (turn.turn <= _lastAutoTurn.value) return   // already processed (reconnect guard)
       _lastAutoTurn.value = turn.turn
+      if (turn.turn === 1) return   // first player does their own ABCD manually
       _doABCD(uid)
       writeLog(`${actorName(uid)} commence son tour`, uid)
     },

@@ -2,7 +2,7 @@
 
 :root {
     --ease: cubic-bezier(0.16, 1, 0.3, 1);
-    --ease-duration: 420ms;
+    --ease-duration: 650ms;
 }
 
 *, *::before, *::after {
