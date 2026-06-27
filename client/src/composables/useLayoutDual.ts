@@ -57,7 +57,7 @@ export function useLayoutDual(cards: MaybeRefOrGetter<readonly CardState[]>) {
     const cx = zone.x + (zone.w - cw) / 2
     const cy = zone.y + (zone.h - ch) / 2
     const OFFSET = 1.5
-    const MAX_DEPTH = 3
+    const MAX_DEPTH = 12
     const start = Math.max(0, n - MAX_DEPTH)
 
     for (let i = 0; i < n; i++) {

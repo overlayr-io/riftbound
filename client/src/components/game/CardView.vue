@@ -7,6 +7,7 @@ import { useBoardShortcuts } from '@/composables/useBoardShortcuts'
 import { PING_ARROW_KEY, type PingArrowContext } from '@/composables/useGamePingArrow'
 import { useCardZoom } from '@/composables/useCardZoom'
 import cardBack from '@/assets/img/card_back.png'
+import runeBack from '@/assets/img/rune_back.png'
 import runeIcon from '@/assets/img/rune_icon.png'
 import CardContextMenu from '@/components/game/CardContextMenu.vue'
 import OpponentCardContextMenu from '@/components/game/OpponentCardContextMenu.vue'
@@ -292,7 +293,7 @@ function onContextMenu(e: MouseEvent) {
       >
       <img
         class="card-face card-back object-contain w-full h-full"
-        :src="cardBack"
+        :src="card.description.type === 'rune' ? runeBack : cardBack"
         alt="dos"
       >
     </div>
