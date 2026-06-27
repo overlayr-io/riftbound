@@ -140,7 +140,7 @@ const style = computed(() => {
 // ── Interactions ─────────────────────────────────────────────────────────────
 
 const EXHAUSTABLE_ZONES = new Set(['base', 'runes', 'legend', 'battlefield', 'battlefield_owner', 'battlefield_opponent'])
-const NON_DRAGGABLE_ZONES = new Set(['legend'])
+const NON_DRAGGABLE_ZONES = new Set(['legend', 'main_deck'])
 
 function toggleExhausted() {
   if (!EXHAUSTABLE_ZONES.has(props.card.zoneId)) return
