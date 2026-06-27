@@ -1020,7 +1020,11 @@ function bleedRect(rect: Rect): Rect {
             <span class="zone-name" :class="labelSide(String(key)) === 'top' ? 'zone-name--top' : 'zone-name--bottom'">
               {{ zoneLabel(String(key)) }}
             </span>
-            <div class="zone-count" :class="labelSide(String(key)) === 'top' ? 'zone-count--top-right' : 'zone-count--bottom-left'">
+            <div
+                v-if="!(key.endsWith('legend') || key.endsWith('champion') || key.endsWith('owner') || key.endsWith('opponent') || key.endsWith('opponent') || key.endsWith('base'))"
+                class="zone-count"
+                :class="labelSide(String(key)) === 'top' ? 'zone-count--top-right' : 'zone-count--bottom-left'"
+            >
               <template v-if="parseZoneKey(String(key)).zone === 'runes' && runeStats[String(key)]">
                 {{ runeStats[String(key)].total - runeStats[String(key)].exhausted }}/{{ runeStats[String(key)].total }}
               </template>
