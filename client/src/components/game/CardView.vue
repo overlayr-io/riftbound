@@ -513,8 +513,8 @@ function onContextMenu(e: MouseEvent) {
 
 .card-action-btn {
   position: absolute;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   border: none;
   display: flex;
   align-items: center;
