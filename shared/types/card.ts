@@ -40,6 +40,7 @@ export interface CardState {
     buffs: number | null
     visibleTo: CardVisibleTo
     groupTo: CardId[]
+    keywords?: string[]
   }
 
   isToken: boolean

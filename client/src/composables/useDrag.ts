@@ -60,6 +60,13 @@ export interface GameActionsContext {
 
 export const GAME_ACTIONS_KEY = Symbol('game-actions') as InjectionKey<GameActionsContext>
 
+export interface KeywordTargetContext {
+  active: import('vue').Ref<boolean>
+  onCardClick: (card: import('@riftbound/shared').CardState) => void
+}
+
+export const KEYWORD_TARGET_KEY = Symbol('keyword-target') as InjectionKey<KeywordTargetContext>
+
 export function useDrag(
   zones: ComputedRef<Record<string, Rect>>,
   cards: ComputedRef<readonly CardState[]>,

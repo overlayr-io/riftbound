@@ -167,6 +167,13 @@ export type DestroyTokenAction = {
   cardId: string
 }
 
+export type SetKeywordsAction = {
+  type: 'SET_KEYWORDS'
+  playerId: PlayerId
+  cardId: string
+  keywords: string[]
+}
+
 // ── Union ─────────────────────────────────────────────────────────────────────
 
 export type GameAction =
@@ -192,6 +199,7 @@ export type GameAction =
   | CopyCardAction
   | TakeControlAction
   | ReturnControlAction
+  | SetKeywordsAction
   // | CopyCardAction
   // | RevealCardForControllerAction
   // | GroupCardAction

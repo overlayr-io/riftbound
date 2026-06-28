@@ -5,6 +5,7 @@ import GameSidebarDual from '@/components/game/GameSidebarDual.vue'
 import GamePresenceOverlay from '@/components/game/GamePresenceOverlay.vue'
 import CardView from '@/components/game/CardView.vue'
 import ZoneView from '@/components/game/ZoneView.vue'
+import PlaymatLayer from '@/components/game/PlaymatLayer.vue'
 import TokenCreationPanel from '@/components/game/TokenCreationPanel.vue'
 import DeckContextMenu from '@/components/game/DeckContextMenu.vue'
 import RunesDeckContextMenu from '@/components/game/RunesDeckContextMenu.vue'
@@ -17,14 +18,17 @@ import { useGameStore } from '@/stores/game'
 import { usePlayerPresence } from '@/composables/usePlayerPresence'
 import { useLayout } from '@/composables/useLayout'
 import { useViewport } from '@/composables/useViewport'
-import { useDrag, DRAG_KEY, GAME_ACTIONS_KEY } from '@/composables/useDrag'
+import { useDrag, DRAG_KEY, GAME_ACTIONS_KEY, KEYWORD_TARGET_KEY } from '@/composables/useDrag'
 import { useBoardShortcuts } from '@/composables/useBoardShortcuts'
+import KeywordPanel from '@/components/game/KeywordPanel.vue'
 import { useGamePingArrow, PING_ARROW_KEY } from '@/composables/useGamePingArrow'
 import { useDeckVision } from '@/composables/useDeckVision'
+import { usePlaymat } from '@/composables/usePlaymat'
 import type { Rect } from '@/types/card.type'
 import type { CardState, CardType, GameAction, ZoneId } from '@riftbound/shared'
 import baronPitImg from '@/assets/img/baron_pit.webp'
 import brushImg from '@/assets/img/brush.webp'
+import XpCounter from '@/components/game/XpCounter.vue'
 
 const store = useGameStore()
 const { width: vw, height: vh } = useViewport()
@@ -121,6 +125,10 @@ function onKeyDown(e: KeyboardEvent) {
     if (store.isMyTurn) store.endTurn()
     return
   }
+  if (e.key === 'Escape') {
+    if (keywordPanelOpen.value) { keywordPanelOpen.value = false; return }
+    if (keywordTargetActive.value) { keywordTargetActive.value = false; pendingKeywords = []; return }
+  }
   if (e.key === 't') {
     if (tokenPanelOpen.value) {
       tokenPanelOpen.value = false
@@ -163,6 +171,12 @@ shortcuts.define({
 })
 
 shortcuts.define({
+  key: 'k',
+  hint: 'Keywords',
+  onInstant: () => { keywordPanelOpen.value = true },
+})
+
+shortcuts.define({
   key: 'g',
   hint: 'Clique la carte parent',
   cardTarget: 'sequence',
@@ -182,6 +196,7 @@ const allCards = computed<readonly CardState[]>(() =>
 )
 
 const { zones, layouts, playersZone } = useLayout(allCards)
+const { resolved: playmat, vars: playmatVars } = usePlaymat('dual')
 
 // ── Ivern Brush ───────────────────────────────────────────────────────────────
 
@@ -230,6 +245,26 @@ function deleteBrushToken() {
 const drag = useDrag(zones, allCards, store.applyAction)
 provide(DRAG_KEY, drag)
 provide(GAME_ACTIONS_KEY, { applyAction: store.applyAction })
+
+// ── Keyword panel ─────────────────────────────────────────────────────────────
+
+const keywordPanelOpen = ref(false)
+const keywordTargetActive = ref(false)
+let pendingKeywords: string[] = []
+
+function onKeywordStartTargeting(keywords: string[]) {
+  pendingKeywords = keywords
+  keywordPanelOpen.value = false
+  keywordTargetActive.value = true
+}
+
+function onKeywordCardClick(card: import('@riftbound/shared').CardState) {
+  store.applyAction({ type: 'SET_KEYWORDS', playerId: card.controllerId, cardId: card.cardId, keywords: pendingKeywords })
+  keywordTargetActive.value = false
+  pendingKeywords = []
+}
+
+provide(KEYWORD_TARGET_KEY, { active: keywordTargetActive, onCardClick: onKeywordCardClick })
 
 const isDragging = computed(() => drag.dragging.value !== null)
 
@@ -821,6 +856,34 @@ function shuffleMyHand() {
 
 
 
+// ── XP counters ───────────────────────────────────────────────────────────────
+
+const XP_W = 72
+const XP_H = 54
+
+function xpCounterRect(playerId: string): Rect | null {
+  const deckRect = zones.value[`${playerId}_main_deck`]
+  const handRect = zones.value[`${playerId}_hand`]
+  if (!deckRect || !handRect) return null
+  const gapStart = deckRect.x + deckRect.w
+  const gapEnd = handRect.x
+  const cx = (gapStart + gapEnd) / 2
+  return {
+    x: cx - XP_W / 2,
+    y: deckRect.y + (deckRect.h - XP_H) / 2,
+    w: XP_W,
+    h: XP_H,
+  }
+}
+
+function xpOf(playerId: string): number {
+  return store.currentRound?.players[playerId]?.xp ?? 0
+}
+
+function onXpChange(playerId: string, newXp: number) {
+  store.setXp(playerId, newXp)
+}
+
 const BLEED = 8
 function bleedRect(rect: Rect): Rect {
   let { x, y, w, h } = rect
@@ -833,7 +896,8 @@ function bleedRect(rect: Rect): Rect {
 </script>
 
 <template>
-  <div class="w-screen h-screen flex bg-[#0a1628]">
+  <div class="w-screen h-screen flex bg-[#0a1628]" :style="playmatVars">
+    <PlaymatLayer :resolved="playmat" />
     <GameSidebarDual @clear-arrows="pingArrow.clearMyArrows()"/>
 
     <div class="flex-1">
@@ -1000,6 +1064,20 @@ function bleedRect(rect: Rect): Rect {
         </div>
 
       </div>
+
+      <!-- XP counters (z:4, between deck and hand) -->
+      <template v-for="pid in store.playerIds" :key="'xp-' + pid">
+        <XpCounter
+          v-if="xpCounterRect(pid)"
+          :player-id="pid"
+          :player-name="store.playerNames[pid]?.name ?? pid.slice(0, 6)"
+          :xp="xpOf(pid)"
+          :rect="xpCounterRect(pid)!"
+          :can-edit="pid === store.myUid"
+          style="z-index: 4"
+          @change="onXpChange"
+        />
+      </template>
 
       <!-- Cards layer (z:3) -->
       <div class="cards-layer">
@@ -1192,6 +1270,12 @@ function bleedRect(rect: Rect): Rect {
       />
 
       <!-- Token creation panel -->
+      <KeywordPanel
+        :open="keywordPanelOpen"
+        @close="keywordPanelOpen = false"
+        @start-targeting="onKeywordStartTargeting"
+      />
+
       <TokenCreationPanel
         v-model:open="tokenPanelOpen"
         :x="tokenPanelX"
@@ -1302,13 +1386,14 @@ function bleedRect(rect: Rect): Rect {
   text-align: center;
   font-size: 9px;
   font-weight: 600;
-  color: #6a8a90;
+  color: var(--playmat-zone-label, #6a8a90);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   white-space: nowrap;
   pointer-events: none;
   line-height: 1;
   user-select: none;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 
 .zone-name--top    { top: 3px; }

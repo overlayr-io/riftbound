@@ -3,6 +3,7 @@ import { ref, computed, watch, nextTick } from 'vue'
 import type { CardState, CardVisibleTo } from '@riftbound/shared'
 import { useGameStore } from '@/stores/game'
 import { useBoardShortcuts } from '@/composables/useBoardShortcuts'
+import { KEYWORDS } from '@/config/keywords'
 
 const props = defineProps<{
   visible: boolean
@@ -131,6 +132,19 @@ function toggleFace() {
 }
 
 // ── Counters ──────────────────────────────────────────────────────────────────
+
+// ── Keywords ──────────────────────────────────────────────────────────────────
+
+const cardKeywords = computed<string[]>(() => props.card?.state.keywords ?? [])
+
+function toggleKeyword(name: string) {
+  if (!props.card) return
+  const current = cardKeywords.value
+  const next = current.includes(name)
+    ? current.filter(k => k !== name)
+    : [...current, name]
+  gameStore.applyAction({ type: 'SET_KEYWORDS', playerId: props.currentPlayerId, cardId: props.card.cardId, keywords: next })
+}
 
 function adjustCounter(field: 'counters' | 'damages' | 'buffs', delta: number) {
   if (!props.card) return
@@ -277,6 +291,39 @@ function adjustCounter(field: 'counters' | 'damages' | 'buffs', delta: number) {
             <button class="ctx-btn ctx-btn--neutral" @click.stop="adjustCounter('buffs', -1)">−</button>
             <span class="ctx-val">{{ card.state.buffs ?? 0 }}</span>
             <button class="ctx-btn ctx-btn--neutral ctx-btn--plus" @click.stop="adjustCounter('buffs', 1)">+</button>
+          </div>
+        </div>
+
+        <div class="ctx-sep" />
+
+        <!-- Keywords -->
+        <div
+          class="ctx-item ctx-item--arrow"
+          @mouseenter="cancelClose(); activeSubmenu = 'keywords'"
+          @click="activeSubmenu = activeSubmenu === 'keywords' ? null : 'keywords'"
+        >
+          <span class="ctx-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+          </span>
+          <span class="ctx-label">Keywords</span>
+          <span v-if="cardKeywords.length" class="ctx-badge-count">{{ cardKeywords.length }}</span>
+          <svg class="ctx-arrow-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+
+          <div v-if="activeSubmenu === 'keywords'" class="ctx-submenu ctx-submenu--keywords" @mouseenter="cancelClose" @mouseleave="scheduleClose">
+            <div class="ctx-submenu-title">KEYWORDS</div>
+            <div
+              v-for="kw in KEYWORDS"
+              :key="kw.name"
+              class="ctx-item ctx-item--kw"
+              :style="{ '--kw-color': kw.color }"
+              @click.stop="toggleKeyword(kw.name)"
+            >
+              <span class="ctx-kw-check" :class="{ 'ctx-kw-check--on': cardKeywords.includes(kw.name) }">
+                <svg v-if="cardKeywords.includes(kw.name)" width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="1.5 5 4 7.5 8.5 2.5"/></svg>
+              </span>
+              <span class="ctx-kw-dot" :style="{ background: kw.color }" />
+              <span class="ctx-label">{{ kw.name }}</span>
+            </div>
           </div>
         </div>
 
@@ -523,7 +570,7 @@ function adjustCounter(field: 'counters' | 'damages' | 'buffs', delta: number) {
 .ctx-submenu {
   position: absolute;
   left: calc(100% + 4px);
-  top: -4px;
+  bottom: -4px;
   min-width: 180px;
   padding: 4px 0;
   background: linear-gradient(160deg, #0e2030 0%, #060d1a 100%);
@@ -581,6 +628,59 @@ function adjustCounter(field: 'counters' | 'damages' | 'buffs', delta: number) {
   color: rgba(255, 255, 255, 0.35);
   font-family: inherit;
   letter-spacing: 0.04em;
+}
+
+.ctx-badge-count {
+  font-size: 9px;
+  font-weight: 700;
+  color: #C8AA6E;
+  background: rgba(200, 170, 110, 0.15);
+  border: 1px solid rgba(200, 170, 110, 0.2);
+  border-radius: 8px;
+  padding: 0 5px;
+  line-height: 14px;
+  min-width: 14px;
+  text-align: center;
+  margin-left: auto;
+  margin-right: 4px;
+}
+
+.ctx-submenu--keywords {
+  min-width: 160px;
+}
+
+.ctx-item--kw {
+  gap: 7px;
+}
+
+.ctx-item--kw:hover {
+  background: color-mix(in srgb, var(--kw-color) 12%, transparent);
+  color: #F2E5CD;
+}
+
+.ctx-kw-check {
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  border: 1.5px solid rgba(200, 170, 110, 0.25);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.ctx-kw-check--on {
+  background: color-mix(in srgb, var(--kw-color) 80%, transparent);
+  border-color: var(--kw-color);
+}
+
+.ctx-kw-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .ctx-item--group:hover  { color: #a0e8c0; background: rgba(60, 200, 130, 0.07); }

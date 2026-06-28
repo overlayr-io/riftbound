@@ -1,11 +1,17 @@
 <script lang="ts" setup>
 
+import { ref, provide } from 'vue'
 import CardView from "@/components/game/CardView.vue";
 import {useGameStore} from "@/stores/game.ts";
 import {useLayout, SEPARATOR} from "@/composables/useLayout.ts";
 import {useViewport} from "@/composables/useViewport.ts";
 import ZoneView from "@/components/game/ZoneView.vue";
+import PlaymatLayer from "@/components/game/PlaymatLayer.vue"
+import XpCounter from "@/components/game/XpCounter.vue";
 import { useBoardShortcuts } from '@/composables/useBoardShortcuts'
+import { usePlaymat } from '@/composables/usePlaymat'
+import { KEYWORD_TARGET_KEY } from '@/composables/useDrag'
+import KeywordPanel from '@/components/game/KeywordPanel.vue'
 import type {Rect} from "@/types/card.type.ts";
 import type { CardState } from '@riftbound/shared';
 
@@ -30,8 +36,34 @@ shortcuts.define({
   cardTarget: 'single',
   onSelect: (card) => { store.addToStack(card.cardId) },
 })
+
+shortcuts.define({
+  key: 'k',
+  hint: 'Keywords',
+  onInstant: () => { keywordPanelOpen.value = true },
+})
+
+const keywordPanelOpen = ref(false)
+const keywordTargetActive = ref(false)
+let pendingKeywords: string[] = []
+
+function onKeywordStartTargeting(keywords: string[]) {
+  pendingKeywords = keywords
+  keywordPanelOpen.value = false
+  keywordTargetActive.value = true
+}
+
+function onKeywordCardClick(card: CardState) {
+  store.applyAction({ type: 'SET_KEYWORDS', playerId: card.controllerId, cardId: card.cardId, keywords: pendingKeywords })
+  keywordTargetActive.value = false
+  pendingKeywords = []
+}
+
+provide(KEYWORD_TARGET_KEY, { active: keywordTargetActive, onCardClick: onKeywordCardClick })
+
 const { playerIds } = store
 const { zones, layouts, playersZone } = useLayout([])
+const { resolved: playmat, vars: playmatVars } = usePlaymat('ffa')
 const { width: vw, height: vh } = useViewport()
 
 // ── Player colors (random, stable for the session) ────────────────────────
@@ -62,6 +94,25 @@ function bfKey(zoneKey: string): string {
   return pid + SEPARATOR + 'battlefield'
 }
 
+const XP_W = 72
+const XP_H = 54
+
+function xpCounterRect(pid: string) {
+  const deckRect = zones.value[`${pid}_main_deck`]
+  const handRect = zones.value[`${pid}_hand`]
+  if (!deckRect || !handRect) return null
+  const cx = (deckRect.x + deckRect.w + handRect.x) / 2
+  return { x: cx - XP_W / 2, y: deckRect.y + (deckRect.h - XP_H) / 2, w: XP_W, h: XP_H }
+}
+
+function xpOf(pid: string): number {
+  return store.currentRound?.players[pid]?.xp ?? 0
+}
+
+function onXpChange(pid: string, newXp: number) {
+  store.setXp(pid, newXp)
+}
+
 const BLEED = 8
 function bleedRect(rect: Rect): Rect {
   let { x, y, w, h } = rect
@@ -75,7 +126,8 @@ function bleedRect(rect: Rect): Rect {
 </script>
 
 <template>
-  <div class="w-screen h-screen flex bg-[#0a1628]">
+  <div class="w-screen h-screen flex bg-[#0a1628]" :style="playmatVars">
+    <PlaymatLayer :resolved="playmat" />
     <div class="flex-1">
 
       <!-- Players zone -->
@@ -109,6 +161,20 @@ function bleedRect(rect: Rect): Rect {
         </template>
       </div>
 
+      <!-- XP counters -->
+      <template v-for="pid in playerIds" :key="'xp-' + pid">
+        <XpCounter
+          v-if="xpCounterRect(pid)"
+          :player-id="pid"
+          :player-name="store.playerNames?.[pid]?.name ?? pid.slice(0, 6)"
+          :xp="xpOf(pid)"
+          :rect="xpCounterRect(pid)!"
+          :can-edit="pid === store.myUid"
+          style="z-index: 4"
+          @change="onXpChange"
+        />
+      </template>
+
       <!-- Zones -->
       <div class="zones-layer" style="z-index:2">
         <ZoneView
@@ -132,6 +198,11 @@ function bleedRect(rect: Rect): Rect {
         </template>
       </div>
     </div>
+    <KeywordPanel
+      :open="keywordPanelOpen"
+      @close="keywordPanelOpen = false"
+      @start-targeting="onKeywordStartTargeting"
+    />
   </div>
 </template>
 

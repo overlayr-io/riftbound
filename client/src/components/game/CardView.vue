@@ -2,7 +2,8 @@
 import { computed, inject, ref, watch, onMounted } from 'vue'
 import type { CardState } from '@riftbound/shared'
 import type { CardLayout } from '@/types/card.type'
-import { DRAG_KEY, GAME_ACTIONS_KEY } from '@/composables/useDrag'
+import { DRAG_KEY, GAME_ACTIONS_KEY, KEYWORD_TARGET_KEY } from '@/composables/useDrag'
+import { KEYWORD_MAP } from '@/config/keywords'
 import { useBoardShortcuts } from '@/composables/useBoardShortcuts'
 import { PING_ARROW_KEY, type PingArrowContext } from '@/composables/useGamePingArrow'
 import { useCardZoom } from '@/composables/useCardZoom'
@@ -25,6 +26,7 @@ const props = defineProps<{
 const drag = inject(DRAG_KEY)
 const actions = inject(GAME_ACTIONS_KEY)
 const pingArrow = inject<PingArrowContext>(PING_ARROW_KEY)
+const keywordTarget = inject(KEYWORD_TARGET_KEY, null)
 const { activeKey, handleCardClick } = useBoardShortcuts()
 
 // ── Visibility ──────────────────────────────────────────────────────────────
@@ -131,7 +133,7 @@ const style = computed(() => {
     height: L.h + 'px',
     zIndex: L.z,
     opacity: runeTokenOpacity.value,
-    cursor: isOwned.value && activeKey.value ? 'crosshair' : undefined,
+    cursor: isOwned.value && (activeKey.value || keywordTarget?.active.value) ? 'crosshair' : undefined,
     filter: baseFilter,
   }
 })
@@ -210,6 +212,13 @@ function onPointerDown(e: PointerEvent) {
   }
 
   if (!isOwned.value) return
+
+  if (keywordTarget?.active.value) {
+    e.preventDefault()
+    e.stopPropagation()
+    keywordTarget.onCardClick(props.card)
+    return
+  }
 
   if (activeKey.value) {
     e.preventDefault()
@@ -328,7 +337,7 @@ function onContextMenu(e: MouseEvent) {
     @pointercancel="onPointerUp"
     @click="onClick"
     @contextmenu="onContextMenu"
-    @pointerenter="(e) => { isHovered = true; if (!isPointerDown && canSeeZoom && card.description.imageUrl) showZoom(card.description.imageUrl, e.currentTarget as Element, card.description.type) }"
+    @pointerenter="(e) => { isHovered = true; if (!isPointerDown && canSeeZoom && card.description.imageUrl) showZoom(card.description.imageUrl, e.currentTarget as Element, card.description.type, card.state.keywords ?? []) }"
     @pointerleave="() => { isHovered = false; hideZoom() }"
   >
     <div class="card-inner" :style="innerStyle">
@@ -349,6 +358,15 @@ function onContextMenu(e: MouseEvent) {
       <span v-if="card.state.counters" class="badge badge-counter">{{ card.state.counters }}</span>
       <span v-if="card.state.damages" class="badge badge-damage">{{ card.state.damages }}</span>
       <span v-if="card.state.buffs" class="badge badge-buff">{{ card.state.buffs }}</span>
+    </div>
+
+    <div v-if="canSeeFront && card.state.keywords?.length" class="kw-badges">
+      <span
+        v-for="kw in card.state.keywords"
+        :key="kw"
+        class="kw-badge-card"
+        :style="{ '--kw-color': KEYWORD_MAP.get(kw)?.color ?? '#666' }"
+      >{{ kw }}</span>
     </div>
 
     <!-- Rune: recycle (top-left) -->
@@ -659,6 +677,39 @@ function onContextMenu(e: MouseEvent) {
   width: 28px;
   height: 28px;
   object-fit: contain;
+}
+
+/* ── Keyword badges ──────────────────────────────────────────────────────── */
+
+.kw-badges {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  z-index: 10;
+  pointer-events: none;
+  width: 100%;
+}
+
+.kw-badge-card {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 6px;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #fff;
+  background: color-mix(in srgb, var(--kw-color) 70%, rgba(0, 0, 0, 0.5));
+  clip-path: polygon(5px 0%, 100% 0%, calc(100% - 5px) 100%, 0% 100%);
+  white-space: nowrap;
+  line-height: 1.5;
+  max-width: 90%;
 }
 
 .rune-action-badge {

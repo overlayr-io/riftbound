@@ -532,6 +532,10 @@ export const useGameStore = defineStore('game', () => {
         return action.value !== null
           ? `${who} a appliqué un buff de ${action.value} à ${cardName(action.cardId)}`
           : `${who} a retiré le buff de ${cardName(action.cardId)}`
+      case 'SET_KEYWORDS':
+        return action.keywords.length
+          ? `${who} a ajouté les keywords [${action.keywords.join(', ')}] à ${cardName(action.cardId)}`
+          : `${who} a retiré les keywords de ${cardName(action.cardId)}`
       default:
         return null
     }
@@ -899,6 +903,18 @@ export const useGameStore = defineStore('game', () => {
         }).catch(console.error)
         break
       }
+
+      case 'SET_KEYWORDS': {
+        const card = round.cards[action.cardId]
+        if (!card) return
+        round.cards[action.cardId] = { ...card, state: { ...card.state, keywords: action.keywords.length ? action.keywords : undefined } }
+        updateDoc(ref, {
+          [`cards.${action.cardId}.state.keywords`]: action.keywords.length ? action.keywords : deleteField(),
+          _updatedBy: sessionId,
+          updatedAt: serverTimestamp(),
+        }).catch(console.error)
+        break
+      }
     }
   }
 
@@ -1126,6 +1142,42 @@ export const useGameStore = defineStore('game', () => {
     }).catch(console.error)
   }
 
+  // Per-player xp debounce state (keyed by playerId)
+  const _xpLogTimers: Record<string, ReturnType<typeof setTimeout>> = {}
+  const _xpLogFrom:  Record<string, number> = {}
+
+  function setXp(playerId: PlayerId, xp: number) {
+    const round = currentRound.value
+    const ref = roundRef()
+    if (!round || !ref || !round.players[playerId]) return
+
+    // Track the value before this sequence started (first click resets debounce)
+    if (!_xpLogTimers[playerId]) {
+      _xpLogFrom[playerId] = round.players[playerId].xp ?? 0
+    } else {
+      clearTimeout(_xpLogTimers[playerId])
+    }
+
+    round.players[playerId] = { ...round.players[playerId], xp }
+
+    updateDoc(ref, {
+      [`players.${playerId}.xp`]: xp,
+      _updatedBy: sessionId,
+      updatedAt: serverTimestamp(),
+    }).catch(console.error)
+
+    _xpLogTimers[playerId] = setTimeout(() => {
+      delete _xpLogTimers[playerId]
+      const from = _xpLogFrom[playerId] ?? 0
+      delete _xpLogFrom[playerId]
+      if (from === xp) return
+      const who = actorName(playerId)
+      const dir = xp > from ? 'gagné' : 'perdu'
+      const diff = Math.abs(xp - from)
+      writeLog(`${who} a ${dir} ${diff} XP (${from} → ${xp})`, playerId)
+    }, 1000)
+  }
+
   return {
     gameId,
     mode,
@@ -1173,6 +1225,7 @@ export const useGameStore = defineStore('game', () => {
     submitSideboard,
     startNextRound,
     setScore,
+    setXp,
     setShowdown,
     clearShowdown,
     shuffleDeck,
