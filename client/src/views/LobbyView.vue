@@ -167,7 +167,7 @@ async function handleMatchmaking() {
 }
 
 async function handleCreate() {
-  await lobbyStore.createLobby(gameMode.value, matchFormat, deckFormatCreate.value)
+  await lobbyStore.createLobby(gameMode.value, matchFormat.value, deckFormatCreate.value)
 }
 
 async function handleJoin() {
