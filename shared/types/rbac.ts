@@ -26,6 +26,7 @@ export type Permission =
   | 'content:cards_manage'
   | 'content:patchnotes_manage'
   | 'content:announce'
+  | 'content:playmats_manage'
   | 'ops:feature_flags'
   | 'ops:maintenance_mode'
   | 'ops:seed_data'
@@ -48,6 +49,7 @@ export const ALL_PERMISSIONS: readonly Permission[] = [
   'content:cards_manage',
   'content:patchnotes_manage',
   'content:announce',
+  'content:playmats_manage',
   'ops:feature_flags',
   'ops:maintenance_mode',
   'ops:seed_data',
@@ -77,6 +79,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'beta:invite_manage',
     'beta:waitlist_decide',
     'analytics:read',
+    'content:playmats_manage',
     'audit:read',
   ],
   support: [

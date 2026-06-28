@@ -26,8 +26,8 @@ defineProps<{
       height: rect.h + 'px',
     }"
   >
-    <div v-if="!noFrame" class="zone-frame" />
     <div v-if="!noFrame" class="zone-bg" />
+    <div v-if="!noFrame" class="zone-frame" />
     <div
       v-if="hint"
       class="drop-hint"
@@ -45,30 +45,32 @@ defineProps<{
   transition: opacity 0.15s;
 }
 
-/* Subtle fill */
+/* Frosted-glass fill — piloté par le playmat actif (verre dépoli). */
 .zone-bg {
   position: absolute;
   inset: 0;
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--playmat-zone-bg, rgba(255, 255, 255, 0.025));
   transition: background 0.15s;
 }
 
-/* Gold corner brackets */
+/* Corner brackets — couleur de bordure du playmat actif. */
 .zone-frame {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  --bk: var(--playmat-zone-border-angle, #C8AA6E);
   background:
-    linear-gradient(#C8AA6E, #C8AA6E) top    left  / 10px 1.5px no-repeat,
-    linear-gradient(#C8AA6E, #C8AA6E) top    left  / 1.5px 10px no-repeat,
-    linear-gradient(#C8AA6E, #C8AA6E) top    right / 10px 1.5px no-repeat,
-    linear-gradient(#C8AA6E, #C8AA6E) top    right / 1.5px 10px no-repeat,
-    linear-gradient(#C8AA6E, #C8AA6E) bottom left  / 10px 1.5px no-repeat,
-    linear-gradient(#C8AA6E, #C8AA6E) bottom left  / 1.5px 10px no-repeat,
-    linear-gradient(#C8AA6E, #C8AA6E) bottom right / 10px 1.5px no-repeat,
-    linear-gradient(#C8AA6E, #C8AA6E) bottom right / 1.5px 10px no-repeat;
-  opacity: 0.45;
+    linear-gradient(var(--bk), var(--bk)) top    left  / 10px 1.5px no-repeat,
+    linear-gradient(var(--bk), var(--bk)) top    left  / 1.5px 10px no-repeat,
+    linear-gradient(var(--bk), var(--bk)) top    right / 10px 1.5px no-repeat,
+    linear-gradient(var(--bk), var(--bk)) top    right / 1.5px 10px no-repeat,
+    linear-gradient(var(--bk), var(--bk)) bottom left  / 10px 1.5px no-repeat,
+    linear-gradient(var(--bk), var(--bk)) bottom left  / 1.5px 10px no-repeat,
+    linear-gradient(var(--bk), var(--bk)) bottom right / 10px 1.5px no-repeat,
+    linear-gradient(var(--bk), var(--bk)) bottom right / 1.5px 10px no-repeat;
+  opacity: 0.55;
   transition: opacity 0.15s;
+  border: 1px solid var(--playmat-zone-border, #C8AA6E);
 }
 
 .zone--drag-dim {

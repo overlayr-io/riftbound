@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase/app'
 import { getAuth, connectAuthEmulator } from 'firebase/auth'
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore'
 import { getDatabase, connectDatabaseEmulator } from 'firebase/database'
+import { getStorage, connectStorageEmulator } from 'firebase/storage'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -17,9 +18,11 @@ export const firebaseApp = initializeApp(firebaseConfig)
 export const auth = getAuth(firebaseApp)
 export const firestore = getFirestore(firebaseApp)
 export const rtdb = getDatabase(firebaseApp)
+export const storage = getStorage(firebaseApp)
 
 if (import.meta.env.VITE_USE_EMULATOR === 'true') {
   connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true })
   connectFirestoreEmulator(firestore, 'localhost', 8080)
   connectDatabaseEmulator(rtdb, 'localhost', 9000)
+  connectStorageEmulator(storage, 'localhost', 9199)
 }

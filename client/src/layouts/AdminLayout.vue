@@ -27,6 +27,7 @@ const navItems: NavItem[] = [
   { label: 'Analytics', to: '/admin/analytics', permission: 'analytics:read', icon: 'M3 3v18h18M7 14l3-3 3 3 5-6' },
   { label: 'Revenu', to: '/admin/revenue', permission: 'revenue:read', icon: 'M12 8c-1.66 0-3 .9-3 2s1.34 2 3 2 3 .9 3 2-1.34 2-3 2m0-8V6m0 12v-2m0-8c1.1 0 2.08.4 2.6 1M9.4 15c.52.6 1.5 1 2.6 1' },
   { label: 'Cartes', to: '/admin/cards', permission: 'content:cards_manage', icon: 'M4 6a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2zM16 8l4 1.5v9L16 17' },
+  { label: 'Plateaux', to: '/admin/playmats', permission: 'content:playmats_manage', icon: 'M3.75 6A2.25 2.25 0 016 3.75h12A2.25 2.25 0 0120.25 6v12A2.25 2.25 0 0118 20.25H6A2.25 2.25 0 013.75 18V6zM3.75 9h16.5M9 20.25V9' },
   { label: 'Patch notes', to: '/admin/patch-notes', permission: 'content:patchnotes_manage', icon: 'M9 12h6m-6 4h6m2 4H7a2 2 0 01-2-2V6a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z' },
   { label: 'Annonces', to: '/admin/announcements', permission: 'content:announce', icon: 'M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z' },
   { label: 'Modération', to: '/admin/moderation', permission: 'players:suspend', icon: 'M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12z' },

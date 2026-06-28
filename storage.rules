@@ -1,0 +1,37 @@
+rules_version = '2';
+
+// Firebase Storage rules — Riftbound playmats
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Official playmats uploadés depuis le back-office.
+    // Lecture publique (assets de jeu) ; écriture réservée aux rôles qui gèrent
+    // le contenu (super_admin / moderator), cohérent avec content:playmats_manage.
+    match /playmats/official/{file=**} {
+      allow read: if true;
+      allow write: if request.auth != null
+                   && request.auth.token.role in ['super_admin', 'moderator']
+                   && request.resource.size < 6 * 1024 * 1024
+                   && request.resource.contentType.matches('image/(webp|jpeg|png)');
+      allow delete: if request.auth != null
+                    && request.auth.token.role in ['super_admin', 'moderator'];
+    }
+
+    // Playmats uploadés par un joueur : playmats/players/{uid}/{variant}/{file}
+    // Lecture publique (un adversaire doit voir la moitié-moitié) ;
+    // écriture par le propriétaire, contrainte type image + taille.
+    match /playmats/players/{uid}/{variant}/{file} {
+      allow read: if true;
+      allow write: if request.auth != null
+                   && request.auth.uid == uid
+                   && (variant == 'full' || variant == 'half')
+                   && request.resource.size < 4 * 1024 * 1024
+                   && request.resource.contentType.matches('image/(webp|jpeg|png)');
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

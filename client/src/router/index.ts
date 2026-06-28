@@ -130,6 +130,12 @@ const router = createRouter({
       meta: { layout: 'admin', requiresAdmin: true, requiresPermission: ['content:cards_manage'] },
     },
     {
+      path: '/admin/playmats',
+      name: 'admin-playmats',
+      component: () => import('@/views/admin/PlaymatsAdminView.vue'),
+      meta: { layout: 'admin', requiresAdmin: true, requiresPermission: ['content:playmats_manage'] },
+    },
+    {
       path: '/admin/patch-notes',
       name: 'admin-patch-notes',
       component: () => import('@/views/admin/PatchNotesAdminView.vue'),

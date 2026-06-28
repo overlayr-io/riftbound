@@ -8,6 +8,7 @@ import adminUsersRoutes from './admin-users.routes'
 import adminBetaRoutes from './admin-beta.routes'
 import adminAnalyticsRoutes from './admin-analytics.routes'
 import adminContentRoutes from './admin-content.routes'
+import adminPlaymatRoutes from './admin-playmat.routes'
 import adminOpsRoutes from './admin-ops.routes'
 import adminSupportRoutes from './admin-support.routes'
 
@@ -37,6 +38,7 @@ router.use('/', adminBetaRoutes)
 router.use('/', adminAnalyticsRoutes)
 // Domaine D — contenu & ops.
 router.use('/', adminContentRoutes)
+router.use('/', adminPlaymatRoutes)
 router.use('/', adminOpsRoutes)
 // Transversal — bug reports, erreurs, RGPD.
 router.use('/', adminSupportRoutes)
