@@ -101,7 +101,10 @@ function xpCounterRect(pid: string) {
   const deckRect = zones.value[`${pid}_main_deck`]
   const handRect = zones.value[`${pid}_hand`]
   if (!deckRect || !handRect) return null
-  const cx = (deckRect.x + deckRect.w + handRect.x) / 2
+  const gapLeft  = Math.min(deckRect.x + deckRect.w, handRect.x + handRect.w)
+  const gapRight = Math.max(deckRect.x, handRect.x)
+  if (gapRight - gapLeft < XP_W) return null
+  const cx = (gapLeft + gapRight) / 2
   return { x: cx - XP_W / 2, y: deckRect.y + (deckRect.h - XP_H) / 2, w: XP_W, h: XP_H }
 }
 

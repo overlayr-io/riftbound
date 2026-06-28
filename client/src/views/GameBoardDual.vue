@@ -865,9 +865,11 @@ function xpCounterRect(playerId: string): Rect | null {
   const deckRect = zones.value[`${playerId}_main_deck`]
   const handRect = zones.value[`${playerId}_hand`]
   if (!deckRect || !handRect) return null
-  const gapStart = deckRect.x + deckRect.w
-  const gapEnd = handRect.x
-  const cx = (gapStart + gapEnd) / 2
+  // Inner edges of the two zones (order depends on mirror: local player has hand to the left of deck)
+  const gapLeft  = Math.min(deckRect.x + deckRect.w, handRect.x + handRect.w)
+  const gapRight = Math.max(deckRect.x, handRect.x)
+  if (gapRight - gapLeft < XP_W) return null
+  const cx = (gapLeft + gapRight) / 2
   return {
     x: cx - XP_W / 2,
     y: deckRect.y + (deckRect.h - XP_H) / 2,

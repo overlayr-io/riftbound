@@ -9,6 +9,7 @@ export interface Player {
 export interface PlayerState {
   playerId: PlayerId
   score: number
+  xp: number
 
   /**
    * Below: setup phase only.

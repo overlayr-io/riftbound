@@ -10,6 +10,7 @@ function makeInitialPlayerState(playerId: PlayerId, deckList: DeckList | null = 
   return {
     playerId,
     score: 0,
+    xp: 0,
     hasSubmittedDeck: deckList !== null,
     deckList,
     legendCard: deckList?.legend ?? null,
