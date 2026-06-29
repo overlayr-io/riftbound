@@ -39,7 +39,7 @@ export class PlaymatService {
   async createOfficial(actor: AuditActor, input: { name: string; variant: PlaymatVariant; imageUrl: string; storagePath: string; zoneStyle: unknown }) {
     const mat = await this.official.create({
       name: input.name.slice(0, 80),
-      variant: input.variant === 'half' ? 'half' : 'full',
+      variant: 'full',
       imageUrl: input.imageUrl,
       storagePath: input.storagePath,
       zoneStyle: sanitizeZoneStyle(input.zoneStyle),
@@ -113,7 +113,7 @@ export class PlaymatService {
   listMine(uid: string) { return this.player.listByOwner(uid) }
 
   async addMine(uid: string, input: { variant: PlaymatVariant; imageUrl: string; storagePath: string; zoneStyle: unknown }): Promise<PlayerPlaymat> {
-    const variant: PlaymatVariant = input.variant === 'half' ? 'half' : 'full'
+    const variant: PlaymatVariant = 'full'
     if (!input.imageUrl || !input.storagePath) throw new Error('INVALID')
     const count = await this.player.countByOwnerVariant(uid, variant)
     if (count >= MAX_PLAYER_PLAYMATS_PER_VARIANT) throw new Error('LIMIT_REACHED')
