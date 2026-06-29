@@ -21,7 +21,7 @@ onMounted(() => store.load())
 const settings = computed(() => store.settings)
 
 const myFull = computed(() => store.mine.filter((m) => m.variant === 'full'))
-const myHalf = computed(() => store.mine.filter((m) => m.variant === 'half'))
+const myHalf = computed(() => [])
 
 function isActive(kind: 'unicolor' | 'official' | 'player', id: string): boolean {
   return !store.settings.random && store.settings.kind === kind && store.settings.id === id

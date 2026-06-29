@@ -91,7 +91,7 @@ export const usePlaymatStore = defineStore('playmat', () => {
   function resolve(mode: 'dual' | '2v2' | 'ffa', seed = ''): ResolvedPlaymat {
     const s = settings.value
     const wantHalf = s.halfMode && mode === 'dual'
-    const variant: PlaymatVariant = wantHalf ? 'half' : 'full'
+    const variant: PlaymatVariant = 'full'
 
     // 1) Aléatoire : tire dans mes images (+ officiels si opt-in) de la variante.
     if (s.random) {
@@ -114,12 +114,12 @@ export const usePlaymatStore = defineStore('playmat', () => {
     }
     if (s.kind === 'official') {
       const mat = official.value.find((o) => o.id === s.id)
-      if (mat) return { backgroundCss: null, imageUrl: mat.imageUrl, zoneStyle: mat.zoneStyle, halfMode: wantHalf && mat.variant === 'half' }
+      if (mat) return { backgroundCss: null, imageUrl: mat.imageUrl, zoneStyle: mat.zoneStyle, halfMode: false }
       return fallback()
     }
     if (s.kind === 'player') {
       const mat = mine.value.find((m) => m.id === s.id)
-      if (mat) return { backgroundCss: null, imageUrl: mat.imageUrl, zoneStyle: mat.zoneStyle, halfMode: wantHalf && mat.variant === 'half' }
+      if (mat) return { backgroundCss: null, imageUrl: mat.imageUrl, zoneStyle: mat.zoneStyle, halfMode: false }
       return fallback() // image supprimée/signalée → thème uni par défaut
     }
     return fallback()
