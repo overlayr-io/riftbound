@@ -4,6 +4,7 @@ import {
   listUnicolors, createUnicolor, updateUnicolor, deleteUnicolor, setUnicolorDefault,
 } from '../controllers/admin-playmat.controller'
 import { requirePermission } from '../middlewares/rbac.middleware'
+import { uploadSingle } from '../middlewares/upload.middleware'
 
 // Monté sous /api/admin (requireAuth déjà appliqué).
 const router = Router()
@@ -11,7 +12,7 @@ const guard = requirePermission('content:playmats_manage')
 
 // Fonds officiels
 router.get('/playmats', guard, listOfficial)
-router.post('/playmats', guard, createOfficial)
+router.post('/playmats', guard, uploadSingle, createOfficial)
 router.patch('/playmats/:id', guard, updateOfficial)
 router.delete('/playmats/:id', guard, deleteOfficial)
 router.post('/playmats/:id/default', guard, setOfficialDefault)

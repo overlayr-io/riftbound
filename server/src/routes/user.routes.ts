@@ -4,6 +4,7 @@ import {
   listMyPlaymats, addMyPlaymat, deleteMyPlaymat, getMySettings, putMySettings,
 } from '../controllers/playmat.controller'
 import { requireAuth } from '../middlewares/auth.middleware'
+import { uploadSingle } from '../middlewares/upload.middleware'
 
 const router = Router()
 
@@ -15,7 +16,7 @@ router.patch('/me', updateMe)
 
 // Playmats du joueur
 router.get('/me/playmats', listMyPlaymats)
-router.post('/me/playmats', addMyPlaymat)
+router.post('/me/playmats', uploadSingle, addMyPlaymat)
 router.delete('/me/playmats/:id', deleteMyPlaymat)
 router.get('/me/playmat-settings', getMySettings)
 router.put('/me/playmat-settings', putMySettings)

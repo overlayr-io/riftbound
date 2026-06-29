@@ -3,7 +3,7 @@ import { onMounted, reactive, ref } from 'vue'
 import type { OfficialPlaymatDto, UnicolorThemeDto, PlaymatVariant, ZoneStyle } from '@riftbound/shared'
 import { DEFAULT_ZONE_STYLE, PLAYMAT_DIMENSIONS } from '@riftbound/shared'
 import { adminPlaymatApi } from '@/services/adminPlaymatApi'
-import { processPlaymatImage, uploadOfficialPlaymat, deleteStorageObject } from '@/utils/playmatImage'
+import { processPlaymatImage } from '@/utils/playmatImage'
 
 const official = ref<OfficialPlaymatDto[]>([])
 const unicolors = ref<UnicolorThemeDto[]>([])
@@ -37,9 +37,8 @@ async function uploadOfficial(e: Event) {
   busy.value = true; error.value = null
   try {
     const { blob } = await processPlaymatImage(file, offForm.variant)
-    const { imageUrl, storagePath } = await uploadOfficialPlaymat(offForm.variant, blob)
     await adminPlaymatApi.createOfficial({
-      name: offForm.name.trim(), variant: offForm.variant, imageUrl, storagePath,
+      name: offForm.name.trim(), variant: offForm.variant, blob,
       zoneStyle: { ...offForm.zoneStyle },
     })
     offForm.name = ''
@@ -50,7 +49,7 @@ async function uploadOfficial(e: Event) {
 
 async function setOfficialDefault(id: string) { await adminPlaymatApi.setOfficialDefault(id); await load() }
 async function delOfficial(o: OfficialPlaymatDto) {
-  await adminPlaymatApi.deleteOfficial(o.id); await deleteStorageObject(o.storagePath); await load()
+  await adminPlaymatApi.deleteOfficial(o.id); await load()
 }
 
 async function createUnicolor() {

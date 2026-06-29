@@ -1,16 +1,21 @@
 import type {
   PlaymatCatalogDto, PlayerPlaymatDto, PlaymatSettings, PlaymatVariant, ZoneStyle,
 } from '@riftbound/shared'
-import { apiFetch } from './http'
+import { apiFetch, apiFetchForm } from './http'
 
 export const playmatApi = {
-  /** Catalogue public (officiels + thèmes unis) — cache long côté store. */
   catalog(): Promise<PlaymatCatalogDto> { return apiFetch('GET', '/public/playmats') },
 
   listMine(): Promise<PlayerPlaymatDto[]> { return apiFetch('GET', '/users/me/playmats') },
-  addMine(input: { variant: PlaymatVariant; imageUrl: string; storagePath: string; zoneStyle: ZoneStyle }): Promise<PlayerPlaymatDto> {
-    return apiFetch('POST', '/users/me/playmats', input)
+
+  addMine(input: { variant: PlaymatVariant; blob: Blob; zoneStyle: ZoneStyle }): Promise<PlayerPlaymatDto> {
+    const form = new FormData()
+    form.append('file', new File([input.blob], 'playmat.webp', { type: 'image/webp' }))
+    form.append('variant', input.variant)
+    form.append('zoneStyle', JSON.stringify(input.zoneStyle))
+    return apiFetchForm('POST', '/users/me/playmats', form)
   },
+
   deleteMine(id: string): Promise<PlayerPlaymatDto> { return apiFetch('DELETE', `/users/me/playmats/${id}`) },
 
   getSettings(): Promise<PlaymatSettings> { return apiFetch('GET', '/users/me/playmat-settings') },

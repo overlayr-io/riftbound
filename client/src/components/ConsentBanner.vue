@@ -23,8 +23,7 @@ async function accept() {
 <template>
   <div v-if="visible" class="consent">
     <span class="txt">
-      On stocke des données de jeu (parties, pseudo) pour faire fonctionner Riftbound, conformément au RGPD.
-      Tu peux demander l'export ou la suppression de tes données à tout moment.
+      Overlayr enregistre certaines données de jeu pour fonctionner correctement avec la possibilité de les supprimer à tout moment.
     </span>
     <button class="accept" @click="accept">J'ai compris</button>
   </div>

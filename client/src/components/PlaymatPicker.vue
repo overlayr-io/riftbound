@@ -5,9 +5,7 @@ import { PLAYMAT_DIMENSIONS, MAX_PLAYER_PLAYMATS_PER_VARIANT } from '@riftbound/
 import { usePlaymatStore } from '@/stores/playmat'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/stores/toast'
-import {
-  processPlaymatImage, autoContrastZoneStyle, uploadPlayerPlaymat, deleteStorageObject,
-} from '@/utils/playmatImage'
+import { processPlaymatImage, autoContrastZoneStyle } from '@/utils/playmatImage'
 import { playmatApi } from '@/services/playmatApi'
 
 const store = usePlaymatStore()
@@ -49,8 +47,7 @@ async function onPick(e: Event, variant: PlaymatVariant) {
   try {
     const { blob } = await processPlaymatImage(file, variant)
     const zoneStyle = await autoContrastZoneStyle(blob)
-    const { imageUrl, storagePath } = await uploadPlayerPlaymat(auth.user.uid, variant, blob)
-    await playmatApi.addMine({ variant, imageUrl, storagePath, zoneStyle })
+    await playmatApi.addMine({ variant, blob, zoneStyle })
     await store.refreshMine()
     toast.success('Image ajoutée')
   } catch (err) {
@@ -60,10 +57,9 @@ async function onPick(e: Event, variant: PlaymatVariant) {
   }
 }
 
-async function removeMine(id: string, storagePath: string) {
+async function removeMine(id: string) {
   try {
     await playmatApi.deleteMine(id)
-    await deleteStorageObject(storagePath)
     await store.refreshMine()
   } catch {
     toast.error('Suppression impossible')
@@ -146,7 +142,7 @@ async function removeMine(id: string, storagePath: string) {
           :style="{ backgroundImage: `url(${m.imageUrl})` }"
           @click="select('player', m.id)"
         >
-          <button class="pm-del" title="Supprimer" @click.stop="removeMine(m.id, m.storagePath)">×</button>
+          <button class="pm-del" title="Supprimer" @click.stop="removeMine(m.id)">×</button>
         </div>
       </div>
     </div>
@@ -168,7 +164,7 @@ async function removeMine(id: string, storagePath: string) {
           :style="{ backgroundImage: `url(${m.imageUrl})` }"
           @click="select('player', m.id)"
         >
-          <button class="pm-del" title="Supprimer" @click.stop="removeMine(m.id, m.storagePath)">×</button>
+          <button class="pm-del" title="Supprimer" @click.stop="removeMine(m.id)">×</button>
         </div>
       </div>
     </div>-->

@@ -1,12 +1,19 @@
 import type { OfficialPlaymatDto, UnicolorThemeDto, PlaymatVariant, ZoneStyle } from '@riftbound/shared'
-import { apiFetch } from './http'
+import { apiFetch, apiFetchForm } from './http'
 
 export const adminPlaymatApi = {
   // ── Fonds officiels ──
   listOfficial(): Promise<OfficialPlaymatDto[]> { return apiFetch('GET', '/admin/playmats') },
-  createOfficial(input: { name: string; variant: PlaymatVariant; imageUrl: string; storagePath: string; zoneStyle: ZoneStyle }): Promise<OfficialPlaymatDto> {
-    return apiFetch('POST', '/admin/playmats', input)
+
+  createOfficial(input: { name: string; variant: PlaymatVariant; blob: Blob; zoneStyle: ZoneStyle }): Promise<OfficialPlaymatDto> {
+    const form = new FormData()
+    form.append('file', new File([input.blob], 'playmat.webp', { type: 'image/webp' }))
+    form.append('name', input.name)
+    form.append('variant', input.variant)
+    form.append('zoneStyle', JSON.stringify(input.zoneStyle))
+    return apiFetchForm('POST', '/admin/playmats', form)
   },
+
   updateOfficial(id: string, patch: { name?: string; zoneStyle?: ZoneStyle }): Promise<OfficialPlaymatDto> {
     return apiFetch('PATCH', `/admin/playmats/${id}`, patch)
   },

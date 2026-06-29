@@ -8,6 +8,22 @@ export class ApiError extends Error {
   }
 }
 
+/** Fetch multipart/form-data authentifié (sans Content-Type pour le boundary). */
+export async function apiFetchForm<T>(method: string, path: string, form: FormData): Promise<T> {
+  const user = auth.currentUser
+  if (!user) throw new Error('Not authenticated')
+  const token = await user.getIdToken()
+  const res = await fetch(`${BASE_URL}/api${path}`, {
+    method,
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  })
+  if (res.status === 204) return undefined as T
+  const data = await res.json()
+  if (!res.ok) throw new ApiError(res.status, data.error ?? 'Unknown error')
+  return data as T
+}
+
 /** Fetch authentifié vers /api/* (Bearer ID token). */
 export async function apiFetch<T>(method: string, path: string, body?: unknown): Promise<T> {
   const user = auth.currentUser
