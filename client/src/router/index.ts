@@ -183,6 +183,11 @@ const router = createRouter({
       component: () => import('@/views/admin/ManageRolesView.vue'),
       meta: { layout: 'admin', requiresAdmin: true, requiresPermission: ['admin:manage_roles'] },
     },
+    // Toute URL inconnue → /welcome
+    {
+      path: '/:pathMatch(.*)*',
+      redirect: '/welcome',
+    },
   ],
 })
 
@@ -224,6 +229,14 @@ router.beforeEach(async (to) => {
     return { name: 'welcome', query }
   }
   return true
+})
+
+// Erreur de navigation (lazy-load chunk manquant, etc.) → /welcome
+router.onError((err) => {
+  console.error('[Router error]', err)
+  if (router.currentRoute.value.name !== 'welcome') {
+    router.push('/welcome')
+  }
 })
 
 export default router

@@ -8,8 +8,9 @@ import { publicApi } from './services/publicApi'
 
 declare const __APP_VERSION__: string
 
+const pinia = createPinia()
 const app = createApp(App)
-app.use(createPinia())
+app.use(pinia)
 app.use(router)
 
 // Logger d'erreurs client léger (throttlé : 1 envoi / 10 s, only si authentifié).
@@ -25,13 +26,33 @@ function reportError(message: string, stack?: string) {
   }).catch(() => { /* best-effort */ })
 }
 
+// Erreur Vue component : redirection vers /welcome sans déconnexion.
+let vueErrorCooldown = false
 app.config.errorHandler = (err) => {
   const e = err as Error
-  console.error(e)
+  console.error('[App error]', e)
   reportError(e?.message ?? 'Vue error', e?.stack)
+  if (!vueErrorCooldown && router.currentRoute.value.name !== 'welcome') {
+    vueErrorCooldown = true
+    router.push('/welcome').finally(() => {
+      setTimeout(() => { vueErrorCooldown = false }, 5000)
+    })
+  }
 }
-window.addEventListener('unhandledrejection', (ev) => {
+
+// Grosse erreur non catchée : déconnexion + redirection.
+let fatalErrorCooldown = false
+window.addEventListener('unhandledrejection', async (ev) => {
   reportError(`Unhandled rejection: ${ev.reason?.message ?? ev.reason}`, ev.reason?.stack)
+  if (fatalErrorCooldown) return
+  fatalErrorCooldown = true
+  try {
+    const { useAuthStore } = await import('./stores/auth')
+    await useAuthStore().signOut()
+  } catch { /* best-effort */ }
+  router.push('/welcome').finally(() => {
+    setTimeout(() => { fatalErrorCooldown = false }, 5000)
+  })
 })
 
 app.mount('#app')
