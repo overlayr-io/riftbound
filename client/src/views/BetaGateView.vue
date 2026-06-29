@@ -82,21 +82,24 @@ async function joinWaitlist() {
       <div class="showcase-overlay" />
 
       <div class="showcase-content">
+        <div class="overlayr-logo">
+          <img src="@/assets/icons/icon-final-light-512.png" alt="Overlayr" />
+          <span>Overlay<span class="overlayr-r">r</span></span>
+        </div>
+
         <div class="brand-lockup">
           <div class="brand-eyebrow">Accès beta fermée</div>
           <h1 class="brand-title">RIFTBOUND<br /><span>TCG</span></h1>
           <p class="brand-tagline">
-            Le jeu de cartes stratégique en ligne.<br />
-            Construis, affronte, domine.
+            La plateforme pour jouer à Riftbound.<br />
+            1v1, 2v2, FFA. Immersion totale.
           </p>
         </div>
 
         <ul class="features">
           <li class="feature">
             <div class="feature-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m0 0h6M6 12H0m12-8.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM3 3a1.5 1.5 0 100-3 1.5 1.5 0 000 3zm18 0a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM3 21a1.5 1.5 0 100-3 1.5 1.5 0 000 3zm18 0a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
-              </svg>
+              ⚔️
             </div>
             <div>
               <strong>Affronte des joueurs dans différents modes de jeu</strong>
@@ -106,9 +109,7 @@ async function joinWaitlist() {
 
           <li class="feature">
             <div class="feature-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128A2.25 2.25 0 002.25 18h15A2.25 2.25 0 0019.5 16.128a3 3 0 00-5.78-1.128m0 0a6 6 0 00-11.44 0m11.44 0A8.251 8.251 0 0112 9a3.75 3.75 0 110 7.5" />
-              </svg>
+              🎨
             </div>
             <div>
               <strong>Ton univers. Ton style.</strong>
@@ -118,9 +119,7 @@ async function joinWaitlist() {
 
           <li class="feature">
             <div class="feature-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006.175 4.5a8.987 8.987 0 00-5.674 2.541c-.694.528-.83 1.556-.164 2.391l1.664 2.477c.674 1.002.858 2.287.352 3.476C2.852 15.714 4.771 17.887 7 18.72V21a.75.75 0 00.75.75h2.5a.75.75 0 00.75-.75v-1.93c.373.38.831.61 1.311.61.48 0 .938-.23 1.311-.61V21a.75.75 0 00.75.75H16a.75.75 0 00.75-.75v-2.28c2.229-.833 4.148-3.006 4.713-5.73.506-1.189.322-2.474-.352-3.476l1.664-2.477c.666-.835.53-1.863-.164-2.391a8.987 8.987 0 00-5.674-2.54 8.967 8.967 0 00-5.825 1.542z" />
-              </svg>
+              📖
             </div>
             <div>
               <strong>
@@ -323,6 +322,32 @@ async function joinWaitlist() {
   z-index: 2;
   padding: 4rem 3.5rem 4rem 4.5rem;
   max-width: 620px;
+}
+
+/* Overlayr Logo */
+.overlayr-logo {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 2.5rem;
+}
+
+.overlayr-logo img {
+  width: 3.2rem;
+  height: 3.2rem;
+  filter: drop-shadow(0 0 8px rgba(130, 91, 255, 0.3));
+}
+
+.overlayr-logo span {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #dde2ea;
+}
+
+.overlayr-r {
+  color: #825bff;
+  font-weight: 800;
 }
 
 /* Brand */
