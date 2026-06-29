@@ -126,7 +126,7 @@ async function removeMine(id: string, storagePath: string) {
     <!-- Mes images -->
     <div class="pm-group-label">
       MES IMAGES
-      <span class="pm-hint">{{ PLAYMAT_DIMENSIONS.full.label }} · {{ PLAYMAT_DIMENSIONS.half.label }}</span>
+      <span class="pm-hint">{{ PLAYMAT_DIMENSIONS.full.label }}</span>
     </div>
 
     <div class="pm-variant">
@@ -151,10 +151,10 @@ async function removeMine(id: string, storagePath: string) {
       </div>
     </div>
 
-    <div class="pm-variant">
+<!--    <div class="pm-variant">
       <div class="pm-variant__head">
         <span>Demi-terrain ({{ myHalf.length }}/{{ MAX_PLAYER_PLAYMATS_PER_VARIANT }})</span>
-        <label class="pm-upload" :class="{ 'pm-upload--busy': uploading === 'half' }">
+        <label class="pm-upload" :class="{ 'pm-upload&#45;&#45;busy': uploading === 'half' }">
           <input type="file" accept="image/*" :disabled="!!uploading || myHalf.length >= MAX_PLAYER_PLAYMATS_PER_VARIANT" @change="onPick($event, 'half')" />
           {{ uploading === 'half' ? '…' : '+ Ajouter' }}
         </label>
@@ -163,15 +163,15 @@ async function removeMine(id: string, storagePath: string) {
         <div
           v-for="m in myHalf"
           :key="m.id"
-          class="pm-tile pm-tile--own pm-tile--half"
-          :class="{ 'pm-tile--active': isActive('player', m.id) }"
+          class="pm-tile pm-tile&#45;&#45;own pm-tile&#45;&#45;half"
+          :class="{ 'pm-tile&#45;&#45;active': isActive('player', m.id) }"
           :style="{ backgroundImage: `url(${m.imageUrl})` }"
           @click="select('player', m.id)"
         >
           <button class="pm-del" title="Supprimer" @click.stop="removeMine(m.id, m.storagePath)">×</button>
         </div>
       </div>
-    </div>
+    </div>-->
   </div>
 </template>
 

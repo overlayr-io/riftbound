@@ -83,13 +83,13 @@ onMounted(load)
     <div class="adm-card block">
       <div class="section-title">Ajouter un fond officiel</div>
       <p class="hint">
-        Recadré + compressé en webp automatiquement. {{ PLAYMAT_DIMENSIONS.full.label }} — {{ PLAYMAT_DIMENSIONS.half.label }}.
+        Recadré + compressé en webp automatiquement. {{ PLAYMAT_DIMENSIONS.full.label }}.
       </p>
       <div class="form">
         <input v-model="offForm.name" class="adm-input" placeholder="Nom du fond" />
         <select v-model="offForm.variant" class="adm-input">
           <option value="full">Fond entier (16:9)</option>
-          <option value="half">Demi-terrain (32:9)</option>
+<!--          <option value="half">Demi-terrain (32:9)</option>-->
         </select>
       </div>
       <div class="zone-style">
@@ -110,7 +110,7 @@ onMounted(load)
       <div v-if="loading" class="adm-state"><div class="adm-spinner" /> Chargement…</div>
       <div v-else-if="!official.length" class="adm-state"><span class="empty">◆</span> Aucun fond.</div>
       <div v-else class="pm-cards">
-        <div v-for="o in official" :key="o.id" class="pm-card" :class="{ 'pm-card--half': o.variant === 'half' }">
+        <div v-for="o in official" :key="o.id" class="pm-card">
           <div class="pm-thumb" :style="{ backgroundImage: `url(${o.imageUrl})` }">
             <span v-if="o.isDefault" class="pm-default-badge">PAR DÉFAUT</span>
             <span class="pm-variant-badge">{{ o.variant }}</span>

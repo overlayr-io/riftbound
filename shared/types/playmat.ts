@@ -7,11 +7,11 @@
 //   - half : 32:9, ≈ 3840×1080 (territoire joueur en 1v1 = largeur × ½ hauteur).
 
 /** full = couvre tout le plateau ; half = couvre la moitié-moitié (1v1 only). */
-export type PlaymatVariant = 'full' | 'half'
+export type PlaymatVariant = 'full' /*| 'half'*/
 
 export const PLAYMAT_DIMENSIONS: Record<PlaymatVariant, { ratio: string; w: number; h: number; label: string }> = {
   full: { ratio: '16:9', w: 2560, h: 1440, label: 'Fond entier — 16:9, ≥ 2560×1440 (idéal 3840×2160)' },
-  half: { ratio: '32:9', w: 3840, h: 1080, label: 'Demi-terrain — 32:9, ≈ 3840×1080' },
+/*half: { ratio: '32:9', w: 3840, h: 1080, label: 'Demi-terrain — 32:9, ≈ 3840×1080' },*/
 }
 
 /** Couleurs des zones de jeu calées sur le contraste du fond. */

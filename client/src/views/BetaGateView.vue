@@ -90,10 +90,6 @@ async function joinWaitlist() {
         <div class="brand-lockup">
           <div class="brand-eyebrow">Accès beta fermée</div>
           <h1 class="brand-title">RIFTBOUND<br /><span>TCG</span></h1>
-          <p class="brand-tagline">
-            La plateforme pour jouer à Riftbound.<br />
-            1v1, 2v2, FFA. Immersion totale.
-          </p>
         </div>
 
         <ul class="features">
@@ -130,13 +126,6 @@ async function joinWaitlist() {
             </div>
           </li>
         </ul>
-
-        <!-- Floating cards decoration -->
-        <div class="cards-deco" aria-hidden="true">
-          <div class="deco-card deco-card--1" />
-          <div class="deco-card deco-card--2" />
-          <div class="deco-card deco-card--3" />
-        </div>
       </div>
     </div>
 
@@ -301,11 +290,11 @@ async function joinWaitlist() {
 .showcase-bg {
   position: absolute;
   inset: 0;
-  background-image: url('@/assets/img/baron_pit.webp');
-  background-size: cover;
+  background-image: url('@/assets/img/board.png');
+  background-size: contain;
   background-position: center 30%;
   transform: scale(1.06);
-  filter: brightness(0.18) saturate(0.5) blur(2px);
+  filter: brightness(0.35) saturate(0.5) blur(2px);
 }
 
 .showcase-overlay {
@@ -339,10 +328,9 @@ async function joinWaitlist() {
 }
 
 .overlayr-logo span {
-  font-size: 0.95rem;
+  font-size: 1.5rem;
   font-weight: 700;
   letter-spacing: 0.05em;
-  color: #dde2ea;
 }
 
 .overlayr-r {
