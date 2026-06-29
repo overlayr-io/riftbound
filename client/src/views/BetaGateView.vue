@@ -123,7 +123,10 @@ async function joinWaitlist() {
               </svg>
             </div>
             <div>
-              <strong>Apprends vite. Entre dans le Rift.</strong>
+              <strong>
+                Apprends vite. Entre dans le Rift.
+                <span class="feature-tag">Bientôt</span>
+              </strong>
               <span>Découvre les bases du jeu grâce à un tutoriel interactif et à des decks de démarrage.</span>
             </div>
           </li>
@@ -398,11 +401,26 @@ async function joinWaitlist() {
 }
 
 .feature strong {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
   font-size: 0.95rem;
   font-weight: 700;
   color: #dde2ea;
   margin-bottom: 0.2rem;
+}
+
+.feature-tag {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: rgba(200, 170, 110, 0.12);
+  border: 1px solid rgba(200, 170, 110, 0.3);
+  color: #c8aa6e;
+  padding: 0.25rem 0.55rem;
+  border-radius: 6px;
 }
 
 .feature span {
