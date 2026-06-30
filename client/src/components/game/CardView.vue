@@ -90,7 +90,7 @@ const stackCopyFilter = computed(() =>
 )
 
 const style = computed(() => {
-  if (!props.layout) return {} as ReturnType<typeof style>
+  if (!props.layout) return {} as Record<string, string | number | undefined>
   if (!isOwned.value) {
     const L = props.layout
     return {
@@ -169,11 +169,11 @@ watch(
     // While dragging the card follows the pointer every frame — never animate,
     // just keep the latest value so the post-drop settle animates from there.
     if (!el || isBeingDragged.value || prevTransform === null || !prev || prev === next || !next) {
-      prevTransform = next ?? null
+      prevTransform = next != null ? String(next) : null
       return
     }
     const from = prevTransform
-    prevTransform = next
+    prevTransform = String(next)
     moveAnim?.cancel()
     const { duration, easing } = motionTokens()
     moveAnim = el.animate(
@@ -184,7 +184,7 @@ watch(
   { flush: 'post' },
 )
 
-onMounted(() => { prevTransform = style.value.transform ?? null })
+onMounted(() => { prevTransform = style.value.transform != null ? String(style.value.transform) : null })
 
 // ── Interactions ─────────────────────────────────────────────────────────────
 
