@@ -90,6 +90,7 @@ const stackCopyFilter = computed(() =>
 )
 
 const style = computed(() => {
+  if (!props.layout) return {} as ReturnType<typeof style>
   if (!isOwned.value) {
     const L = props.layout
     return {
