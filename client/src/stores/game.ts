@@ -543,10 +543,12 @@ export const useGameStore = defineStore('game', () => {
 
   function writeLog(description: string, actorId: string | null = null) {
     const gId = gameId.value
+    const rId = currentRoundId.value
     if (!gId) return
     addDoc(collection(firestore, 'games', gId, 'logs'), {
       playerId: actorId,
       description,
+      roundId: rId,
       createdAt: serverTimestamp(),
     }).catch(() => {})
   }

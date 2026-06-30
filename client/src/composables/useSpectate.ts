@@ -18,6 +18,7 @@ export interface SpectateLog {
   logId: string
   playerId: string | null
   description: string
+  roundId: string | null
 }
 
 /**
@@ -61,11 +62,15 @@ export function useSpectate(
     unsubLogs = onSnapshot(
       query(collection(firestore, 'games', gid, 'logs'), orderBy('createdAt', 'desc'), limit(40)),
       (snap) => {
-        logs.value = snap.docs.map((d) => ({
-          logId: d.id,
-          playerId: d.data().playerId ?? null,
-          description: d.data().description ?? '',
-        }))
+        const rid = roundId()
+        logs.value = snap.docs
+          .map((d) => ({
+            logId: d.id,
+            playerId: d.data().playerId ?? null,
+            description: d.data().description ?? '',
+            roundId: d.data().roundId ?? null,
+          }))
+          .filter((l) => !rid || l.roundId === rid)
       },
       () => {},
     )

@@ -1,12 +1,17 @@
 import { ref } from 'vue'
-import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, type Unsubscribe } from 'firebase/firestore'
+import { collection, query, orderBy, limit, onSnapshot, type Unsubscribe } from 'firebase/firestore'
 import type { GameLog } from '@riftbound/shared'
 import { firestore } from '@/firebase'
 import { gameApi } from '@/services/api'
 
-export function useGameLogs(gameId: () => string | null) {
+export function useGameLogs(gameId: () => string | null, roundId: () => string | null) {
   const logs = ref<GameLog[]>([])
   const loading = ref(false)
+
+  function filterByRound(all: GameLog[]): GameLog[] {
+    const rid = roundId()
+    return rid ? all.filter(l => l.roundId === rid) : all
+  }
 
   // ── Remote player: one-time fetch ─────────────────────────────────────────────
   async function fetchLogs() {
@@ -14,7 +19,8 @@ export function useGameLogs(gameId: () => string | null) {
     if (!gId) return
     loading.value = true
     try {
-      logs.value = await gameApi.getLogs(gId)
+      const all = await gameApi.getLogs(gId)
+      logs.value = filterByRound(all)
     } finally {
       loading.value = false
     }
@@ -33,15 +39,17 @@ export function useGameLogs(gameId: () => string | null) {
       limit(200),
     )
     unsub = onSnapshot(q, snap => {
-      logs.value = snap.docs.map(d => {
+      const all = snap.docs.map(d => {
         const data = d.data()
         return {
           logId: d.id,
           playerId: data.playerId ?? null,
           description: data.description ?? '',
+          roundId: data.roundId ?? null,
           createdAt: data.createdAt?.toDate() ?? null,
         } as GameLog
       })
+      logs.value = filterByRound(all)
       loading.value = false
     })
   }
@@ -51,25 +59,5 @@ export function useGameLogs(gameId: () => string | null) {
     unsub = null
   }
 
-  async function logAction(
-    _action: { type: string },
-    playerId: string,
-    playerNames: Record<string, { name: string }>,
-  ) {
-    const gId = gameId()
-    if (!gId) return
-    const playerName = playerNames[playerId]?.name ?? playerId.slice(0, 6)
-    const description = `${playerName} a effectué une action`
-    try {
-      await addDoc(collection(firestore, 'games', gId, 'logs'), {
-        playerId,
-        description,
-        createdAt: serverTimestamp(),
-      })
-    } catch {
-      // non-critical
-    }
-  }
-
-  return { logs, loading, fetchLogs, subscribe, unsubscribe, logAction }
+  return { logs, loading, fetchLogs, subscribe, unsubscribe }
 }

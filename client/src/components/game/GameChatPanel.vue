@@ -44,7 +44,10 @@ watch(messages, async () => {
 }, { deep: true })
 
 // ── Logs ──────────────────────────────────────────────────────────────────────
-const { logs, loading: logsLoading, fetchLogs, subscribe, unsubscribe } = useGameLogs(() => props.gameId)
+const { logs, loading: logsLoading, fetchLogs, subscribe, unsubscribe } = useGameLogs(
+  () => props.gameId,
+  () => null,
+)
 const logsEl = ref<HTMLElement | null>(null)
 
 // Local player (myUid present) → reactive onSnapshot while tab is open.

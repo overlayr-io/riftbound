@@ -11,4 +11,5 @@ export interface GameLog {
   playerId: string | null
   description: string
   createdAt: Date
+  roundId: string | null
 }
